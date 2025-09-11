@@ -5,7 +5,6 @@ const NewTrendForm = ({ isOpen, onClose, onTrendAdded, editingTrend = null }) =>
   const [formData, setFormData] = useState({
     topic: '',
     views: '',
-    description: '',
     youtubeLink: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -19,7 +18,6 @@ const NewTrendForm = ({ isOpen, onClose, onTrendAdded, editingTrend = null }) =>
       setFormData({
         topic: editingTrend.topic || '',
         views: editingTrend.views || '',
-        description: editingTrend.description || '',
         youtubeLink: editingTrend.youtubeLink || ''
       });
     } else {
@@ -27,7 +25,6 @@ const NewTrendForm = ({ isOpen, onClose, onTrendAdded, editingTrend = null }) =>
       setFormData({
         topic: '',
         views: '',
-        description: '',
         youtubeLink: ''
       });
     }
@@ -37,6 +34,13 @@ const NewTrendForm = ({ isOpen, onClose, onTrendAdded, editingTrend = null }) =>
   const analyzeYouTubeVideo = async (youtubeUrl) => {
     if (!youtubeUrl.trim()) {
       setYoutubeError('');
+      return;
+    }
+
+    // Basic URL validation before sending to API
+    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
+    if (!youtubeRegex.test(youtubeUrl.trim())) {
+      setYoutubeError('Please enter a valid YouTube URL (e.g., https://www.youtube.com/watch?v=...)');
       return;
     }
 
@@ -64,12 +68,13 @@ const NewTrendForm = ({ isOpen, onClose, onTrendAdded, editingTrend = null }) =>
         setYoutubeError('');
         console.log('✅ YouTube video analyzed successfully:', result.video);
       } else {
-        setYoutubeError(result.error || 'Failed to analyze video');
-        console.error('❌ YouTube analysis failed:', result.error);
+        const errorMessage = result.error || 'Failed to analyze video';
+        setYoutubeError(errorMessage);
+        console.error('❌ YouTube analysis failed:', errorMessage);
       }
     } catch (error) {
       console.error('Error analyzing YouTube video:', error);
-      setYoutubeError('Network error. Please try again.');
+      setYoutubeError('Network error. Please check your connection and try again.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -89,8 +94,8 @@ const NewTrendForm = ({ isOpen, onClose, onTrendAdded, editingTrend = null }) =>
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.topic || !formData.views) {
-      setError('Please fill in all required fields');
+    if (!formData.topic) {
+      setError('Please fill in the required field: Title');
       return;
     }
 
@@ -108,8 +113,7 @@ const NewTrendForm = ({ isOpen, onClose, onTrendAdded, editingTrend = null }) =>
         },
         body: JSON.stringify({
           topic: formData.topic,
-          views: parseInt(formData.views),
-          description: formData.description,
+          views: parseInt(formData.views) || 0,
           youtubeLink: formData.youtubeLink,
           status: "Active"
         }),
@@ -122,7 +126,7 @@ const NewTrendForm = ({ isOpen, onClose, onTrendAdded, editingTrend = null }) =>
         onTrendAdded(result.trend);
         
         // Reset form and close modal
-        setFormData({ topic: '', views: '', description: '', youtubeLink: '' });
+        setFormData({ topic: '', views: '', youtubeLink: '' });
         onClose();
       } else {
         setError(result.error || 'Failed to save trend');
@@ -223,13 +227,13 @@ const NewTrendForm = ({ isOpen, onClose, onTrendAdded, editingTrend = null }) =>
             {/* Topic Field */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Topic <span className="text-red-500">*</span>
+                Title <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={formData.topic}
                 onChange={(e) => handleChange('topic', e.target.value)}
-                placeholder="Enter trend topic"
+                placeholder="Enter trend title"
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-300"
                 required
               />
@@ -238,7 +242,7 @@ const NewTrendForm = ({ isOpen, onClose, onTrendAdded, editingTrend = null }) =>
             {/* Views Field */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Views <span className="text-red-500">*</span>
+                Views
               </label>
               <input
                 type="number"
@@ -247,7 +251,6 @@ const NewTrendForm = ({ isOpen, onClose, onTrendAdded, editingTrend = null }) =>
                 placeholder="Enter view count"
                 min="0"
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-300"
-                required
               />
               {formData.youtubeLink && (
                 <div className="mt-2 space-y-1">
@@ -267,19 +270,6 @@ const NewTrendForm = ({ isOpen, onClose, onTrendAdded, editingTrend = null }) =>
               )}
             </div>
 
-            {/* Description Field */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Description
-              </label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => handleChange('description', e.target.value)}
-                placeholder="Enter trend description (optional)"
-                rows="3"
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-300 resize-none"
-              />
-            </div>
 
             {/* Submit Button */}
             <div className="flex justify-end gap-3 pt-4">

@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import Navbar from './navbar/navbar';
 import AdminPage from './admin/page';
 import UserLogin from './loginRegister/UserLogin';
+import LandingPage from './components/LandingPage';
 
 const HomePage = async() => {
   let session;
@@ -71,16 +72,10 @@ const HomePage = async() => {
     );
   }
 
-  // If no session or invalid session, show login page directly
+  // If no session or invalid session, show landing page first
   if (!session || !session.user || (!session.user.role && !session.role)) {
-    console.log("No valid session found, showing login page");
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="w-full max-w-md">
-          <UserLogin />
-        </div>
-      </div>
-    );
+    console.log("No valid session found, showing landing page");
+    return <LandingPage />;
   }
 
   // Get role and username from session
@@ -106,15 +101,9 @@ const HomePage = async() => {
     return <AdminPage/>;
   }
 
-  // If role is neither user nor admin, show login page
-  console.log("Invalid role detected, showing login page");
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="w-full max-w-md">
-        <UserLogin />
-      </div>
-    </div>
-  );
+  // If role is neither user nor admin, show landing page
+  console.log("Invalid role detected, showing landing page");
+  return <LandingPage />;
 }
 
 export default HomePage

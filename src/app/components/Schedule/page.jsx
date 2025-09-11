@@ -603,6 +603,8 @@ const SchedulePage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showAllSchedules, setShowAllSchedules] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [scheduleToDelete, setScheduleToDelete] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [loadingDoctors, setLoadingDoctors] = useState(false);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
@@ -745,29 +747,42 @@ const SchedulePage = () => {
 
   // Handle Delete Action
   const handleDelete = async (scheduleId) => {
-    if (window.confirm('Are you sure you want to delete this schedule?')) {
-      setIsDeleting(true);
-      try {
-        const response = await fetch(`/api/schedule?id=${scheduleId}`, {
-          method: 'DELETE',
-        });
+    const schedule = schedules.find(s => (s._id || s.id) === scheduleId);
+    setScheduleToDelete({ id: scheduleId, schedule });
+    setShowDeleteModal(true);
+  };
 
-        if (response.ok) {
-          // Remove from local state
-          setSchedules(prev => prev.filter(s => s._id !== scheduleId && s.id !== scheduleId));
-          // Dispatch event to notify other components
-          window.dispatchEvent(new CustomEvent('scheduleUpdated'));
-          alert('Schedule deleted successfully!');
-        } else {
-          alert('Failed to delete schedule');
-        }
-      } catch (error) {
-        console.error('Error deleting schedule:', error);
-        alert('Error deleting schedule');
-      } finally {
-        setIsDeleting(false);
+  const confirmDeleteSchedule = async () => {
+    if (!scheduleToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/schedule?id=${scheduleToDelete.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        // Remove from local state
+        setSchedules(prev => prev.filter(s => s._id !== scheduleToDelete.id && s.id !== scheduleToDelete.id));
+        // Dispatch event to notify other components
+        window.dispatchEvent(new CustomEvent('scheduleUpdated'));
+        alert('Schedule deleted successfully!');
+      } else {
+        alert('Failed to delete schedule');
       }
+    } catch (error) {
+      console.error('Error deleting schedule:', error);
+      alert('Error deleting schedule');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+      setScheduleToDelete(null);
     }
+  };
+
+  const cancelDeleteSchedule = () => {
+    setShowDeleteModal(false);
+    setScheduleToDelete(null);
   };
 
   // Handle Show All button click
@@ -1318,6 +1333,47 @@ const SchedulePage = () => {
               onClose={() => setShowEditModal(false)}
               onUpdate={fetchSchedules}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && scheduleToDelete && (
+        <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-center mb-4">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-lg font-medium text-gray-900">Confirm Delete</h3>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-sm text-gray-700">
+                Are you sure you want to delete the schedule for <strong>"{scheduleToDelete.schedule?.doctor}"</strong> in <strong>"{scheduleToDelete.schedule?.department}"</strong>? This action cannot be undone.
+              </p>
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={confirmDeleteSchedule}
+                disabled={isDeleting}
+                className="flex-1 bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? 'Deleting...' : 'Yes'}
+              </button>
+              <button
+                onClick={cancelDeleteSchedule}
+                disabled={isDeleting}
+                className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-400 transition-colors disabled:bg-gray-200 disabled:cursor-not-allowed"
+              >
+                No
+              </button>
+            </div>
           </div>
         </div>
       )}

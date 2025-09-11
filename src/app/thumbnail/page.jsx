@@ -1,5 +1,5 @@
+ 
 'use client';
-
 import React, { useState, useEffect } from 'react';
 import Navbar from '../navbar/navbar';
 import ProtectedRoute from '../components/ProtectedRoute';
@@ -30,6 +30,7 @@ const ThumbnailPage = () => {
   const [editFormData, setEditFormData] = useState({
     department: '',
     doctor: '',
+    topic: '',
     languages: {
       telugu: null,
       english: null,
@@ -44,6 +45,12 @@ const ThumbnailPage = () => {
   const [editingDoctors, setEditingDoctors] = useState([]);
   const [editingLoadingDoctors, setEditingLoadingDoctors] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [thumbnailToDelete, setThumbnailToDelete] = useState(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showTopicModal, setShowTopicModal] = useState(false);
+  const [selectedTopic, setSelectedTopic] = useState('');
 
   // Function to reset form data
   const resetFormData = () => {
@@ -347,6 +354,7 @@ const ThumbnailPage = () => {
         const teluguFormData = new FormData();
         teluguFormData.append('department', dataToUse.department);
         teluguFormData.append('doctor', dataToUse.doctor);
+        teluguFormData.append('topic', dataToUse.topic);
         teluguFormData.append('thumbnail', dataToUse.teluguThumbnail);
         teluguFormData.append('language', 'telugu');
         teluguFormData.append('userId', userId);
@@ -370,6 +378,7 @@ const ThumbnailPage = () => {
         const englishFormData = new FormData();
         englishFormData.append('department', dataToUse.department);
         englishFormData.append('doctor', dataToUse.doctor);
+        englishFormData.append('topic', dataToUse.topic);
         englishFormData.append('thumbnail', dataToUse.englishThumbnail);
         englishFormData.append('language', 'english');
         englishFormData.append('userId', userId);
@@ -393,6 +402,7 @@ const ThumbnailPage = () => {
         const hindiFormData = new FormData();
         hindiFormData.append('department', dataToUse.department);
         hindiFormData.append('doctor', dataToUse.doctor);
+        hindiFormData.append('topic', dataToUse.topic);
         hindiFormData.append('thumbnail', dataToUse.hindiThumbnail);
         hindiFormData.append('language', 'hindi');
         hindiFormData.append('userId', userId);
@@ -417,7 +427,17 @@ const ThumbnailPage = () => {
 
       if (createdThumbnails.length > 0) {
         console.log('🎉 Thumbnails created successfully!');
-        setThumbnails(prev => [...createdThumbnails, ...prev]);
+        // Optimistically enrich created thumbnails with topic/ids/names so table shows correctly without refresh
+        const selectedDeptForCreate = departments.find(dept => dept._id === dataToUse.department);
+        const enrichedCreated = createdThumbnails.map(t => ({
+          ...t,
+          topic: t.topic ?? dataToUse.topic ?? '',
+          doctor: t.doctor || dataToUse.doctor,
+          department: t.department || dataToUse.department,
+          doctorName: t.doctorName || doctorName,
+          departmentName: t.departmentName || selectedDeptForCreate?.name
+        }));
+        setThumbnails(prev => [...enrichedCreated, ...prev]);
         closeAddForm();
         
         // Track thumbnail creation activities
@@ -466,8 +486,8 @@ const ThumbnailPage = () => {
     }
   };
 
-  // Handle thumbnail deletion
-  const handleDelete = async (thumbnail) => {
+  // Handle thumbnail deletion - show modal
+  const handleDelete = (thumbnail) => {
     // Debug: Log the thumbnail object to understand its structure
     console.log('🔍 Thumbnail object for deletion:', thumbnail);
     console.log('🔍 Available properties:', Object.keys(thumbnail));
@@ -485,22 +505,24 @@ const ThumbnailPage = () => {
 
     console.log('✅ Found thumbnail ID:', thumbnailId);
 
+    // Set the thumbnail to delete and show modal
+    setThumbnailToDelete(thumbnail);
+    setShowDeleteModal(true);
+  };
+
+  // Confirm delete function
+  const confirmDeleteThumbnail = async () => {
+    if (!thumbnailToDelete) return;
+
+    const thumbnail = thumbnailToDelete;
+    const thumbnailId = thumbnail._id || thumbnail.id || thumbnail.thumbnailId;
+
     // Determine what to delete based on language filter
-    let deleteMessage = '';
     let deleteType = '';
-
     if (selectedLanguage) {
-      // Language-specific deletion
       deleteType = 'language';
-      deleteMessage = `Are you sure you want to delete the ${selectedLanguage} thumbnail for this doctor?\n\nDoctor: ${thumbnail.doctorName || 'Unknown'}\nDepartment: ${thumbnail.departmentName || 'Unknown'}\nLanguage: ${selectedLanguage.charAt(0).toUpperCase() + selectedLanguage.slice(1)}`;
     } else {
-      // Delete entire doctor group (all languages)
       deleteType = 'all';
-      deleteMessage = `Are you sure you want to delete ALL thumbnails for this doctor?\n\nDoctor: ${thumbnail.doctorName || 'Unknown'}\nDepartment: ${thumbnail.departmentName || 'Unknown'}\nThis will remove thumbnails in all languages (Telugu, English, Hindi)`;
-    }
-
-    if (!confirm(deleteMessage)) {
-      return;
     }
 
     try {
@@ -540,7 +562,8 @@ const ThumbnailPage = () => {
           // Dispatch event to update dashboard counts
         window.dispatchEvent(new CustomEvent('thumbnailUpdated'));
           
-          alert(`Successfully deleted ${selectedLanguage} thumbnail!`);
+          setSuccessMessage(`Successfully deleted ${selectedLanguage} thumbnail for ${thumbnail.doctorName || 'Unknown'}!`);
+          setShowSuccessModal(true);
       } else {
           const errorData = await response.json().catch(() => ({}));
           console.error('❌ Delete API error response:', errorData);
@@ -548,23 +571,24 @@ const ThumbnailPage = () => {
           alert(`Failed to delete ${selectedLanguage} thumbnail: ${errorData.message || `HTTP ${response.status}`}`);
         }
       } else {
-        // Delete all language thumbnails for the doctor
-        console.log('🗑️ Attempting to delete ALL thumbnails for doctor:', thumbnail);
+        // Delete all language thumbnails for the specific topic
+        console.log('🗑️ Attempting to delete ALL thumbnails for topic:', thumbnail);
         
-        // Find all thumbnails for this doctor
-        const doctorThumbnails = thumbnails.filter(thumb => 
-          thumb.doctor === thumbnail.doctorId || thumb.doctor === thumbnail.doctor
+        // Find all thumbnails for this specific topic (same doctor + same topic)
+        const topicThumbnails = thumbnails.filter(thumb => 
+          (thumb.doctor === thumbnail.doctorId || thumb.doctor === thumbnail.doctor) &&
+          thumb.topic === thumbnail.topic
         );
         
-        console.log(`📋 Found ${doctorThumbnails.length} thumbnails to delete for doctor`);
+        console.log(`📋 Found ${topicThumbnails.length} thumbnails to delete for topic "${thumbnail.topic}"`);
         
-        if (doctorThumbnails.length === 0) {
-          alert('No thumbnails found for this doctor to delete.');
+        if (topicThumbnails.length === 0) {
+          alert(`No thumbnails found for topic "${thumbnail.topic}" to delete.`);
           return;
         }
         
-        // Delete all thumbnails for the doctor
-        const deletePromises = doctorThumbnails.map(async (thumb) => {
+        // Delete all thumbnails for the topic
+        const deletePromises = topicThumbnails.map(async (thumb) => {
           const thumbId = thumb._id || thumb.id || thumb.thumbnailId;
           const response = await fetch(`/api/thumbnails/${thumbId}`, {
             method: 'DELETE'
@@ -586,7 +610,7 @@ const ThumbnailPage = () => {
             
             // Track each deleted thumbnail
             successfulDeletes.forEach(result => {
-              const deletedThumbnail = doctorThumbnails.find(dt => 
+              const deletedThumbnail = topicThumbnails.find(dt => 
                 (dt._id || dt.id || dt.thumbnailId) === result.thumbId
               );
               
@@ -595,27 +619,30 @@ const ThumbnailPage = () => {
                   fileName: deletedThumbnail.thumbnailUrl ? deletedThumbnail.thumbnailUrl.split('/').pop() : 'thumbnail',
                   language: deletedThumbnail.language,
                   department: thumbnail.departmentName || 'Unknown',
-                  reason: deleteType === 'language' ? `Deleted ${selectedLanguage} thumbnail` : 'Deleted all thumbnails for doctor'
+                  topic: thumbnail.topic || 'Unknown Topic',
+                  reason: deleteType === 'language' ? `Deleted ${selectedLanguage} thumbnail` : `Deleted all thumbnails for topic "${thumbnail.topic}"`
                 });
               }
             });
           }
           
-          // Remove all thumbnails for this doctor from local state
+          // Remove all thumbnails for this topic from local state
           setThumbnails(prev => prev.filter(thumb => {
-            const isDoctorThumb = doctorThumbnails.some(dt => 
+            const isTopicThumb = topicThumbnails.some(dt => 
               (dt._id || dt.id || dt.thumbnailId) === (thumb._id || thumb.id || thumb.thumbnailId)
             );
-            return !isDoctorThumb;
+            return !isTopicThumb;
           }));
           
           // Dispatch event to update dashboard counts
           window.dispatchEvent(new CustomEvent('thumbnailUpdated'));
           
           if (failedDeletes.length === 0) {
-            alert(`Successfully deleted all ${successfulDeletes.length} thumbnails for this doctor!`);
+            setSuccessMessage(`Successfully deleted all thumbnails for topic "${thumbnail.topic}"!`);
+            setShowSuccessModal(true);
           } else {
-            alert(`Partially successful: Deleted ${successfulDeletes.length} thumbnails, failed to delete ${failedDeletes.length} thumbnails.`);
+            setSuccessMessage(`Partially successful: Deleted ${successfulDeletes.length} thumbnails, failed to delete ${failedDeletes.length} thumbnails for topic "${thumbnail.topic}".`);
+            setShowSuccessModal(true);
           }
         } else {
           alert('Failed to delete any thumbnails. Please try again.');
@@ -629,15 +656,46 @@ const ThumbnailPage = () => {
         stack: err.stack
       });
       alert(`Error deleting thumbnail(s): ${err.message}`);
+    } finally {
+      // Close modal and reset state
+      setShowDeleteModal(false);
+      setThumbnailToDelete(null);
     }
+  };
+
+  // Cancel delete function
+  const cancelDeleteThumbnail = () => {
+    setShowDeleteModal(false);
+    setThumbnailToDelete(null);
+  };
+
+  // Close success modal function
+  const closeSuccessModal = () => {
+    setShowSuccessModal(false);
+    setSuccessMessage('');
+  };
+
+  // Handle topic view
+  const handleTopicView = (topic) => {
+    setSelectedTopic(topic);
+    setShowTopicModal(true);
+  };
+
+  // Close topic modal
+  const closeTopicModal = () => {
+    setShowTopicModal(false);
+    setSelectedTopic('');
   };
 
   // Handle opening edit form
   const handleEdit = (thumbnail) => {
+    console.log('🔍 Opening edit form for thumbnail:', thumbnail);
+    
     setEditingThumbnail(thumbnail);
     setEditFormData({
-      department: thumbnail.department,
-      doctor: thumbnail.doctor,
+      department: thumbnail.department || thumbnail.departmentId,
+      doctor: thumbnail.doctor || thumbnail.doctorId,
+      topic: thumbnail.topic || '',
       languages: {
         telugu: thumbnail.teluguThumbnailUrl,
         english: thumbnail.englishThumbnailUrl,
@@ -651,8 +709,12 @@ const ThumbnailPage = () => {
     });
     
     // Fetch doctors for the current department
-    if (thumbnail.department) {
-      fetchEditingDoctorsByDepartment(thumbnail.department);
+    const deptId = thumbnail.department || thumbnail.departmentId;
+    if (deptId) {
+      console.log('🔍 Fetching doctors for department:', deptId);
+      fetchEditingDoctorsByDepartment(deptId);
+    } else {
+      console.error('❌ No department ID found in thumbnail:', thumbnail);
     }
   };
 
@@ -729,6 +791,12 @@ const ThumbnailPage = () => {
     }
   };
 
+  // Calculate change indicators for the form
+  const hasNewThumbnails = editFormData.newThumbnails.telugu || editFormData.newThumbnails.english || editFormData.newThumbnails.hindi;
+  const hasTopicChange = editingThumbnail ? editFormData.topic !== (editingThumbnail.topic || '') : false;
+  const hasDepartmentChange = editingThumbnail ? editFormData.department !== editingThumbnail.department : false;
+  const hasDoctorChange = editingThumbnail ? editFormData.doctor !== editingThumbnail.doctor : false;
+
   // Handle edit form submission
   const handleEditSubmit = async (e) => {
     e.preventDefault();
@@ -736,13 +804,17 @@ const ThumbnailPage = () => {
     console.log('🚀 Starting multi-language thumbnail edit submission...');
     console.log('📋 Edit form data:', editFormData);
     
-    if (!editFormData.department || !editFormData.doctor) {
-      console.error('❌ Missing required fields in edit form:', {
-        department: !!editFormData.department,
-        doctor: !!editFormData.doctor
-      });
-      alert('Please fill all required fields');
+    if (!hasNewThumbnails && !hasTopicChange && !hasDepartmentChange && !hasDoctorChange) {
+      alert('No changes detected. Please make some changes before submitting.');
       return;
+    }
+    
+    // If changing department or doctor, validate that both are selected
+    if (hasDepartmentChange || hasDoctorChange) {
+      if (!editFormData.department || !editFormData.doctor) {
+        alert('Please select both department and doctor when changing these fields.');
+        return;
+      }
     }
 
     try {
@@ -754,56 +826,183 @@ const ThumbnailPage = () => {
       const updatePromises = [];
       const updatedThumbnails = [];
       
-      // Process Telugu thumbnail
-      if (editFormData.newThumbnails.telugu && editingThumbnail.languages.telugu) {
+      // Determine which fields to update based on changes
+      const updateFields = {
+        department: hasDepartmentChange ? editFormData.department : editingThumbnail.department,
+        doctor: hasDoctorChange ? editFormData.doctor : editingThumbnail.doctor,
+        topic: hasTopicChange ? editFormData.topic : (editingThumbnail.topic || '')
+      };
+      
+      // Validate that required fields are not undefined
+      if (!updateFields.department) {
+        console.error('❌ Department is undefined:', {
+          hasDepartmentChange,
+          editFormDataDepartment: editFormData.department,
+          editingThumbnailDepartment: editingThumbnail.department
+        });
+        alert('Error: Department is required but not found. Please select a department.');
+        return;
+      }
+      
+      if (!updateFields.doctor) {
+        console.error('❌ Doctor is undefined:', {
+          hasDoctorChange,
+          editFormDataDoctor: editFormData.doctor,
+          editingThumbnailDoctor: editingThumbnail.doctor
+        });
+        alert('Error: Doctor is required but not found. Please select a doctor.');
+        return;
+      }
+      
+      console.log('🔍 Change detection:', {
+        hasTopicChange,
+        hasDepartmentChange,
+        hasDoctorChange,
+        hasNewThumbnails,
+        originalTopic: editingThumbnail.topic,
+        newTopic: editFormData.topic,
+        updateFields
+      });
+      
+      // Debug topic update specifically
+      if (hasTopicChange) {
+        console.log('📝 Topic change detected:', {
+          from: editingThumbnail.topic,
+          to: editFormData.topic,
+          updateFieldsTopic: updateFields.topic
+        });
+      }
+      
+      // Process Telugu thumbnail (update existing or add new)
+      if (editFormData.newThumbnails.telugu) {
         const teluguFormData = new FormData();
-        teluguFormData.append('department', editFormData.department);
-        teluguFormData.append('doctor', editFormData.doctor);
+        teluguFormData.append('department', updateFields.department);
+        teluguFormData.append('doctor', updateFields.doctor);
+        teluguFormData.append('topic', updateFields.topic);
         teluguFormData.append('thumbnail', editFormData.newThumbnails.telugu);
         teluguFormData.append('language', 'telugu');
-        
+
+        const isExisting = Boolean(editingThumbnail.languages.telugu);
+        const url = isExisting ? `/api/thumbnails/${editingThumbnail.languages.telugu.id}` : '/api/thumbnails';
+        const method = isExisting ? 'PATCH' : 'POST';
+
         updatePromises.push(
-          fetch(`/api/thumbnails/${editingThumbnail.languages.telugu.id}`, {
-            method: 'PATCH',
-            body: teluguFormData
-          }).then(response => response.json())
+          fetch(url, { method, body: teluguFormData })
+          .then(async response => {
+            const result = await response.json();
+            if (!response.ok) {
+              throw new Error(result.message || `HTTP ${response.status}`);
+            }
+            return result;
+          })
+          .catch(error => {
+            console.error('❌ Telugu thumbnail upsert failed:', error);
+            return { success: false, error: error.message };
+          })
         );
       }
       
-      // Process English thumbnail
-      if (editFormData.newThumbnails.english && editingThumbnail.languages.english) {
+      // Process English thumbnail (update existing or add new)
+      if (editFormData.newThumbnails.english) {
         const englishFormData = new FormData();
-        englishFormData.append('department', editFormData.department);
-        englishFormData.append('doctor', editFormData.doctor);
+        englishFormData.append('department', updateFields.department);
+        englishFormData.append('doctor', updateFields.doctor);
+        englishFormData.append('topic', updateFields.topic);
         englishFormData.append('thumbnail', editFormData.newThumbnails.english);
         englishFormData.append('language', 'english');
-        
+
+        const isExisting = Boolean(editingThumbnail.languages.english);
+        const url = isExisting ? `/api/thumbnails/${editingThumbnail.languages.english.id}` : '/api/thumbnails';
+        const method = isExisting ? 'PATCH' : 'POST';
+
         updatePromises.push(
-          fetch(`/api/thumbnails/${editingThumbnail.languages.english.id}`, {
-        method: 'PATCH',
-            body: englishFormData
-          }).then(response => response.json())
+          fetch(url, { method, body: englishFormData })
+          .then(async response => {
+            const result = await response.json();
+            if (!response.ok) {
+              throw new Error(result.message || `HTTP ${response.status}`);
+            }
+            return result;
+          })
+          .catch(error => {
+            console.error('❌ English thumbnail upsert failed:', error);
+            return { success: false, error: error.message };
+          })
         );
       }
       
-      // Process Hindi thumbnail
-      if (editFormData.newThumbnails.hindi && editingThumbnail.languages.hindi) {
+      // Process Hindi thumbnail (update existing or add new)
+      if (editFormData.newThumbnails.hindi) {
         const hindiFormData = new FormData();
-        hindiFormData.append('department', editFormData.department);
-        hindiFormData.append('doctor', editFormData.doctor);
+        hindiFormData.append('department', updateFields.department);
+        hindiFormData.append('doctor', updateFields.doctor);
+        hindiFormData.append('topic', updateFields.topic);
         hindiFormData.append('thumbnail', editFormData.newThumbnails.hindi);
         hindiFormData.append('language', 'hindi');
-        
+
+        const isExisting = Boolean(editingThumbnail.languages.hindi);
+        const url = isExisting ? `/api/thumbnails/${editingThumbnail.languages.hindi.id}` : '/api/thumbnails';
+        const method = isExisting ? 'PATCH' : 'POST';
+
         updatePromises.push(
-          fetch(`/api/thumbnails/${editingThumbnail.languages.hindi.id}`, {
-            method: 'PATCH',
-            body: hindiFormData
-          }).then(response => response.json())
+          fetch(url, { method, body: hindiFormData })
+          .then(async response => {
+            const result = await response.json();
+            if (!response.ok) {
+              throw new Error(result.message || `HTTP ${response.status}`);
+            }
+            return result;
+          })
+          .catch(error => {
+            console.error('❌ Hindi thumbnail upsert failed:', error);
+            return { success: false, error: error.message };
+          })
         );
+      }
+      
+      // If no thumbnail changes but other fields changed, update all existing thumbnails
+      if (updatePromises.length === 0 && (hasTopicChange || hasDepartmentChange || hasDoctorChange)) {
+        const languages = ['telugu', 'english', 'hindi'];
+        
+        languages.forEach(lang => {
+          if (editingThumbnail.languages[lang]) {
+            const formData = new FormData();
+            formData.append('department', updateFields.department);
+            formData.append('doctor', updateFields.doctor);
+            formData.append('topic', updateFields.topic);
+            formData.append('language', lang);
+            
+            console.log(`🔄 Updating ${lang} thumbnail with topic:`, updateFields.topic);
+            console.log(`📤 Form data for ${lang}:`, {
+              department: updateFields.department,
+              doctor: updateFields.doctor,
+              topic: updateFields.topic,
+              language: lang
+            });
+            
+            updatePromises.push(
+              fetch(`/api/thumbnails/${editingThumbnail.languages[lang].id}`, {
+                method: 'PATCH',
+                body: formData
+              })
+              .then(async response => {
+                const result = await response.json();
+                if (!response.ok) {
+                  throw new Error(result.message || `HTTP ${response.status}`);
+                }
+                return result;
+              })
+              .catch(error => {
+                console.error(`❌ ${lang} thumbnail update failed:`, error);
+                return { success: false, error: error.message };
+              })
+            );
+          }
+        });
       }
       
       if (updatePromises.length === 0) {
-        alert('No changes detected. Please select new thumbnails to update.');
+        alert('No changes detected. Please make some changes before submitting.');
         return;
       }
       
@@ -814,11 +1013,82 @@ const ThumbnailPage = () => {
       
       console.log('📡 All update responses:', results);
       
-      // Check if all updates were successful
-      const allSuccessful = results.every(result => result.success);
+      // Check update outcomes
+      const allSuccessful = results.every(result => result && result.success);
+      const anySuccessful = results.some(result => result && result.success);
+      const failedUpdates = results.filter(result => !result || !result.success);
       
-      if (allSuccessful) {
+      console.log('🔍 Update results analysis:', {
+        totalUpdates: results.length,
+        successful: results.filter(r => r && r.success).length,
+        failed: failedUpdates.length,
+        failedDetails: failedUpdates
+      });
+      
+      if (anySuccessful) {
         console.log('🎉 All language thumbnails updated successfully!');
+        // Optimistically update local thumbnails so all table fields reflect immediately
+        try {
+          // Build the set of existing language thumbnail IDs in the edited group
+          const editedLanguageIds = new Set(
+            Object.values(editingThumbnail.languages || {})
+              .filter(l => l && l.id)
+              .map(l => l.id)
+          );
+
+          // Resolve display names
+          const newDepartmentName = (() => {
+            const dept = departments.find(d => d._id === updateFields.department);
+            return dept ? dept.name : editingThumbnail.departmentName;
+          })();
+          const newDoctorName = (() => {
+            const doc = editingDoctors.find(d => d._id === updateFields.doctor) ||
+                        doctors.find(d => d._id === updateFields.doctor);
+            return doc ? doc.name : editingThumbnail.doctorName;
+          })();
+
+          const successfulResults = results.filter(r => r && r.success && r.thumbnail);
+
+          setThumbnails(prev => {
+            // Update all thumbnails in the edited group with new meta (topic, doctor/department)
+            const updatedPrev = prev.map(t => {
+              const id = t._id || t.id || t.thumbnailId;
+              if (editedLanguageIds.has(id)) {
+                // If we have a fresh thumbnail payload for this id, merge it to refresh URL
+                const res = successfulResults.find(r => r.thumbnail && (r.thumbnail._id === id));
+                const merged = res ? { ...t, ...res.thumbnail } : t;
+                return {
+                  ...merged,
+                  topic: updateFields.topic,
+                  department: updateFields.department,
+                  departmentName: newDepartmentName,
+                  doctor: updateFields.doctor,
+                  doctorName: newDoctorName
+                };
+              }
+              return t;
+            });
+
+            // Add newly created language thumbnails (those not previously in the edited group)
+            const created = successfulResults
+              .map(r => r.thumbnail)
+              .filter(th => th && !editedLanguageIds.has(th._id));
+
+            // Ensure display names present on created items
+            const createdWithNames = created.map(th => ({
+              ...th,
+              topic: updateFields.topic,
+              department: updateFields.department,
+              departmentName: th.departmentName || newDepartmentName,
+              doctor: updateFields.doctor,
+              doctorName: th.doctorName || newDoctorName
+            }));
+
+            return [...createdWithNames, ...updatedPrev];
+          });
+        } catch (optimisticErr) {
+          console.warn('⚠️ Optimistic update failed, will rely on refetch:', optimisticErr);
+        }
         
         // Track thumbnail update activities
         const sessionInfo = getCurrentSessionInfo();
@@ -841,13 +1111,15 @@ const ThumbnailPage = () => {
           });
         }
         
-        // Refresh the thumbnails list
+        // Refresh data to ensure all changes are properly reflected
+        console.log('🔄 Refreshing thumbnail data after successful update...');
         await fetchThumbnails();
           
           // Reset edit form
         setEditFormData({ 
           department: '', 
           doctor: '', 
+          topic: '',
           languages: { telugu: null, english: null, hindi: null },
           newThumbnails: { telugu: null, english: null, hindi: null }
         });
@@ -857,11 +1129,28 @@ const ThumbnailPage = () => {
           // Dispatch event to update dashboard counts
           window.dispatchEvent(new CustomEvent('thumbnailUpdated'));
           
-        alert(`Successfully updated ${results.length} language thumbnail(s)!`);
+        // Show success message with details about what was updated
+        const updateDetails = [];
+        if (hasTopicChange) updateDetails.push('topic');
+        if (hasDepartmentChange) updateDetails.push('department');
+        if (hasDoctorChange) updateDetails.push('doctor');
+        if (hasNewThumbnails) updateDetails.push('thumbnails');
+        
+        const updateMessage = updateDetails.length > 0 
+          ? `Successfully updated ${updateDetails.join(', ')}!`
+          : `Successfully updated ${results.length} language thumbnail(s)!`;
+          
+        alert(updateMessage);
         } else {
-        const failedUpdates = results.filter(result => !result.success);
         console.error('❌ Some updates failed:', failedUpdates);
-        alert(`Failed to update ${failedUpdates.length} thumbnail(s). Please try again.`);
+        
+        // Create detailed error message
+        const errorDetails = failedUpdates.map((result, index) => {
+          const errorMsg = result?.message || result?.error || 'Unknown error';
+          return `Update ${index + 1}: ${errorMsg}`;
+        }).join('\n');
+        
+        alert(`Failed to update ${failedUpdates.length} thumbnail(s).\n\nError details:\n${errorDetails}\n\nPlease try again.`);
       }
     } catch (err) {
       console.error('❌ Error updating thumbnails:', err);
@@ -877,19 +1166,25 @@ const ThumbnailPage = () => {
     }
   };
 
-  // Group thumbnails by doctor for table display
+  // Group thumbnails by doctor and topic for table display
   const groupedThumbnails = thumbnails.reduce((groups, thumbnail) => {
     const doctorId = thumbnail.doctor;
     const doctorName = thumbnail.doctorName;
     const departmentId = thumbnail.department;
     const departmentName = thumbnail.departmentName;
+    const topic = thumbnail.topic;
     
-    if (!groups[doctorId]) {
-      groups[doctorId] = {
+    
+    // Create a unique key combining doctor ID and topic
+    const groupKey = `${doctorId}-${topic || 'no-topic'}`;
+    
+    if (!groups[groupKey]) {
+      groups[groupKey] = {
         doctorId,
         doctorName,
         departmentId,
         departmentName,
+        topic,
         languages: {},
         totalThumbnails: 0,
         createdAt: thumbnail.createdAt,
@@ -898,7 +1193,7 @@ const ThumbnailPage = () => {
     }
     
     // Add language thumbnail
-    groups[doctorId].languages[thumbnail.language] = {
+    groups[groupKey].languages[thumbnail.language] = {
       id: thumbnail._id,
       thumbnailUrl: thumbnail.thumbnailUrl,
       language: thumbnail.language,
@@ -906,14 +1201,14 @@ const ThumbnailPage = () => {
       updatedAt: thumbnail.updatedAt
     };
     
-    groups[doctorId].totalThumbnails++;
+    groups[groupKey].totalThumbnails++;
     
     // Update timestamps to show the most recent
-    if (new Date(thumbnail.updatedAt) > new Date(groups[doctorId].updatedAt)) {
-      groups[doctorId].updatedAt = thumbnail.updatedAt;
+    if (new Date(thumbnail.updatedAt) > new Date(groups[groupKey].updatedAt)) {
+      groups[groupKey].updatedAt = thumbnail.updatedAt;
     }
-    if (new Date(thumbnail.createdAt) < new Date(groups[doctorId].createdAt)) {
-      groups[doctorId].createdAt = thumbnail.createdAt;
+    if (new Date(thumbnail.createdAt) < new Date(groups[groupKey].createdAt)) {
+      groups[groupKey].createdAt = thumbnail.createdAt;
     }
     
     return groups;
@@ -924,7 +1219,8 @@ const ThumbnailPage = () => {
     const searchLower = searchQuery.toLowerCase();
     const matchesSearch = searchQuery === '' || 
                          (group.doctorName && group.doctorName.toLowerCase().includes(searchLower)) ||
-                         (group.departmentName && group.departmentName.toLowerCase().includes(searchLower));
+                         (group.departmentName && group.departmentName.toLowerCase().includes(searchLower)) ||
+                         (group.topic && group.topic.toLowerCase().includes(searchLower));
     const matchesDepartment = !selectedDepartment || group.departmentId === selectedDepartment;
     
     // Language filtering: only show doctors who have thumbnails in the selected language
@@ -1081,7 +1377,7 @@ const ThumbnailPage = () => {
 
           {/* Thumbnail Details Modal */}
           {viewingThumbnail && (
-            <div className="fixed inset-0  bg-opacity-50% flex items-center justify-center z-50">
+            <div className="fixed inset-0  bg-black/50 bg-opacity-50% flex items-center justify-center z-50">
               <div className="bg-white rounded-xl p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-bold">Thumbnail Details</h2>
@@ -1109,6 +1405,10 @@ const ThumbnailPage = () => {
                       <div>
                           <span className="font-medium text-gray-600">Department:</span>
                           <span className="ml-2 text-gray-900">{viewingThumbnail.departmentName}</span>
+                      </div>
+                      <div>
+                          <span className="font-medium text-gray-600">Topic:</span>
+                          <span className="ml-2 text-gray-900">{viewingThumbnail.topic || 'N/A'}</span>
                       </div>
                       <div>
                           <span className="font-medium text-gray-600">Total Thumbnails:</span>
@@ -1187,7 +1487,7 @@ const ThumbnailPage = () => {
 
           {/* Edit Thumbnail Modal */}
           {editingThumbnail && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-xl p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-bold">Edit Doctor Thumbnails</h2>
@@ -1197,6 +1497,7 @@ const ThumbnailPage = () => {
                       setEditFormData({ 
                         department: '', 
                         doctor: '', 
+                        topic: '',
                         languages: { telugu: null, english: null, hindi: null },
                         newThumbnails: { telugu: null, english: null, hindi: null }
                       });
@@ -1211,6 +1512,22 @@ const ThumbnailPage = () => {
                 </div>
 
                 <form onSubmit={handleEditSubmit} className="space-y-6">
+                  {/* Edit Instructions */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start">
+                      <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <h4 className="text-sm font-medium text-blue-800 mb-1">Flexible Editing</h4>
+                        <p className="text-xs text-blue-700">
+                          You can edit any specific field you want to change. Only modified fields will be updated. 
+                          Fields marked with <span className="text-red-500 font-semibold">*</span> indicate changes will be made.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Doctor Information */}
                   <div className="bg-gray-50 rounded-lg p-4">
                     <h3 className="text-lg font-semibold text-gray-800 mb-3">Doctor Information</h3>
@@ -1230,37 +1547,58 @@ const ThumbnailPage = () => {
                     </div>
                   </div>
 
+                  {/* Topic Field */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Topic
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormData.topic}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, topic: e.target.value }))}
+                      placeholder={editingThumbnail?.topic || "Enter topic name"}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
+                        'border-gray-300'
+                      }`}
+                    />
+                  </div>
+
                   {/* Department Selection */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Select Department *
+                      Select Department {hasDepartmentChange && <span className="text-red-500">*</span>}
                     </label>
                     <select
                       value={editFormData.department}
                       onChange={handleEditDepartmentChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
+                        hasDepartmentChange ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                     >
-                      <option value="">Choose Department</option>
+                      <option value="">{editingThumbnail?.departmentName || 'Choose Department'}</option>
                       {departments.map(dept => (
                         <option key={dept._id} value={dept._id}>
                           {dept.name}
                         </option>
                       ))}
                     </select>
+                    {hasDepartmentChange && (
+                      <p className="text-xs text-red-600 mt-1">Department will be changed</p>
+                    )}
                   </div>
 
                   {/* Doctor Selection */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Select Doctor *
+                      Select Doctor {hasDoctorChange && <span className="text-red-500">*</span>}
                     </label>
                     <select
                       value={editFormData.doctor}
                       onChange={(e) => setEditFormData(prev => ({ ...prev, doctor: e.target.value }))}
-                      required
                       disabled={!editFormData.department || editingLoadingDoctors}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 ${
+                        hasDoctorChange ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                     >
                       <option value="">
                         {!editFormData.department 
@@ -1269,7 +1607,7 @@ const ThumbnailPage = () => {
                             ? 'Loading doctors...'
                             : editingDoctors.length === 0 
                               ? 'No doctors available in this department' 
-                              : 'Choose Doctor'
+                              : editingThumbnail?.doctorName || 'Choose Doctor'
                         }
                       </option>
                       {!editingLoadingDoctors && editingDoctors.length > 0 && editingDoctors.map(doctor => (
@@ -1278,18 +1616,60 @@ const ThumbnailPage = () => {
                         </option>
                       ))}
                     </select>
+                    {hasDoctorChange && (
+                      <p className="text-xs text-red-600 mt-1">Doctor will be changed</p>
+                    )}
                   </div>
 
                   {/* Language Thumbnails Section */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-gray-800">
-                      {selectedLanguage ? `${selectedLanguage.charAt(0).toUpperCase() + selectedLanguage.slice(1)} Thumbnails` : 'Language Thumbnails'}
-                    </h3>
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-gray-800">
+                        Language Thumbnails
+                      </h3>
+                      <div className="text-sm text-gray-500">
+                        Add or replace thumbnails for any language
+                      </div>
+                    </div>
                     
-                    {/* Telugu Thumbnail - Show only when no filter or Telugu filter is active */}
+                    {/* Language Tabs */}
+                    <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+                      {['telugu', 'english', 'hindi'].map((lang) => (
+                        <button
+                          key={lang}
+                          type="button"
+                          onClick={() => setSelectedLanguage(selectedLanguage === lang ? '' : lang)}
+                          className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                            selectedLanguage === lang
+                              ? 'bg-white text-indigo-700 shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          {lang.charAt(0).toUpperCase() + lang.slice(1)}
+                          {editingThumbnail.languages[lang] && (
+                            <span className="ml-1 text-green-600">✓</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Telugu Thumbnail */}
                     {(!selectedLanguage || selectedLanguage === 'telugu') && (
-                      <div className="border border-gray-200 rounded-lg p-4">
-                        <h4 className="text-md font-medium text-gray-700 mb-3">Telugu Thumbnail</h4>
+                      <div className={`border rounded-lg p-4 transition-all ${
+                        editFormData.newThumbnails.telugu ? 'border-green-300 bg-green-50' : 'border-gray-200'
+                      }`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-md font-medium text-gray-700 flex items-center">
+                            <span className="w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
+                            Telugu Thumbnail
+                            {editingThumbnail.languages.telugu && (
+                              <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Existing</span>
+                            )}
+                          </h4>
+                          {editFormData.newThumbnails.telugu && (
+                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">New Selected</span>
+                          )}
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-600 mb-2">Current Thumbnail</label>
@@ -1302,13 +1682,20 @@ const ThumbnailPage = () => {
                                 />
                               </div>
                             ) : (
-                              <div className="bg-gray-100 rounded-lg p-3 flex items-center justify-center text-gray-500">
-                                No Telugu thumbnail
+                              <div className="bg-gray-100 rounded-lg p-3 flex items-center justify-center text-gray-500 border-2 border-dashed border-gray-300">
+                                <div className="text-center">
+                                  <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  <p className="text-sm text-gray-500 mt-1">No Telugu thumbnail</p>
+                                </div>
                               </div>
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-600 mb-2">New Thumbnail (Optional)</label>
+                            <label className="block text-sm font-medium text-gray-600 mb-2">
+                              {editingThumbnail.languages.telugu ? 'Replace Thumbnail' : 'Add Thumbnail'}
+                            </label>
                             <input
                               type="file"
                               name="telugu"
@@ -1317,21 +1704,39 @@ const ThumbnailPage = () => {
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                             />
                             {editFormData.newThumbnails.telugu && (
-                      <p className="text-sm text-green-600 mt-1">
-                                New image selected: {editFormData.newThumbnails.telugu.name}
-                      </p>
-                    )}
-                  </div>
+                              <div className="mt-2 p-2 bg-green-50 rounded-lg">
+                                <p className="text-sm text-green-700 font-medium">
+                                  ✓ New image selected: {editFormData.newThumbnails.telugu.name}
+                                </p>
+                                <p className="text-xs text-green-600">
+                                  Size: {(editFormData.newThumbnails.telugu.size / 1024 / 1024).toFixed(2)} MB
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
 
-                    {/* English Thumbnail - Show only when no filter or English filter is active */}
+                    {/* English Thumbnail */}
                     {(!selectedLanguage || selectedLanguage === 'english') && (
-                      <div className="border border-gray-200 rounded-lg p-4">
-                        <h4 className="text-md font-medium text-gray-700 mb-3">English Thumbnail</h4>
+                      <div className={`border rounded-lg p-4 transition-all ${
+                        editFormData.newThumbnails.english ? 'border-green-300 bg-green-50' : 'border-gray-200'
+                      }`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-md font-medium text-gray-700 flex items-center">
+                            <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                            English Thumbnail
+                            {editingThumbnail.languages.english && (
+                              <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Existing</span>
+                            )}
+                          </h4>
+                          {editFormData.newThumbnails.english && (
+                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">New Selected</span>
+                          )}
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
+                          <div>
                             <label className="block text-sm font-medium text-gray-600 mb-2">Current Thumbnail</label>
                             {editingThumbnail.languages.english ? (
                               <div className="bg-gray-100 rounded-lg p-3 flex items-center justify-center">
@@ -1342,36 +1747,61 @@ const ThumbnailPage = () => {
                                 />
                               </div>
                             ) : (
-                              <div className="bg-gray-100 rounded-lg p-3 flex items-center justify-center text-gray-500">
-                                No English thumbnail
+                              <div className="bg-gray-100 rounded-lg p-3 flex items-center justify-center text-gray-500 border-2 border-dashed border-gray-300">
+                                <div className="text-center">
+                                  <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  <p className="text-sm text-gray-500 mt-1">No English thumbnail</p>
+                                </div>
                               </div>
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-600 mb-2">New Thumbnail (Optional)</label>
+                            <label className="block text-sm font-medium text-gray-600 mb-2">
+                              {editingThumbnail.languages.english ? 'Replace Thumbnail' : 'Add Thumbnail'}
+                            </label>
                             <input
                               type="file"
                               name="english"
                               accept="image/*"
                               onChange={handleEditFileChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                             />
                             {editFormData.newThumbnails.english && (
-                              <p className="text-sm text-green-600 mt-1">
-                                New image selected: {editFormData.newThumbnails.english.name}
-                              </p>
+                              <div className="mt-2 p-2 bg-green-50 rounded-lg">
+                                <p className="text-sm text-green-700 font-medium">
+                                  ✓ New image selected: {editFormData.newThumbnails.english.name}
+                                </p>
+                                <p className="text-xs text-green-600">
+                                  Size: {(editFormData.newThumbnails.english.size / 1024 / 1024).toFixed(2)} MB
+                                </p>
+                              </div>
                             )}
-                  </div>
+                          </div>
                         </div>
                       </div>
                     )}
 
-                    {/* Hindi Thumbnail - Show only when no filter or Hindi filter is active */}
+                    {/* Hindi Thumbnail */}
                     {(!selectedLanguage || selectedLanguage === 'hindi') && (
-                      <div className="border border-gray-200 rounded-lg p-4">
-                        <h4 className="text-md font-medium text-gray-700 mb-3">Hindi Thumbnail</h4>
+                      <div className={`border rounded-lg p-4 transition-all ${
+                        editFormData.newThumbnails.hindi ? 'border-green-300 bg-green-50' : 'border-gray-200'
+                      }`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-md font-medium text-gray-700 flex items-center">
+                            <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                            Hindi Thumbnail
+                            {editingThumbnail.languages.hindi && (
+                              <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Existing</span>
+                            )}
+                          </h4>
+                          {editFormData.newThumbnails.hindi && (
+                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">New Selected</span>
+                          )}
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
+                          <div>
                             <label className="block text-sm font-medium text-gray-600 mb-2">Current Thumbnail</label>
                             {editingThumbnail.languages.hindi ? (
                               <div className="bg-gray-100 rounded-lg p-3 flex items-center justify-center">
@@ -1382,25 +1812,37 @@ const ThumbnailPage = () => {
                                 />
                               </div>
                             ) : (
-                              <div className="bg-gray-100 rounded-lg p-3 flex items-center justify-center text-gray-500">
-                                No Hindi thumbnail
+                              <div className="bg-gray-100 rounded-lg p-3 flex items-center justify-center text-gray-500 border-2 border-dashed border-gray-300">
+                                <div className="text-center">
+                                  <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  <p className="text-sm text-gray-500 mt-1">No Hindi thumbnail</p>
+                                </div>
                               </div>
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-600 mb-2">New Thumbnail (Optional)</label>
-                    <input
-                      type="file"
+                            <label className="block text-sm font-medium text-gray-600 mb-2">
+                              {editingThumbnail.languages.hindi ? 'Replace Thumbnail' : 'Add Thumbnail'}
+                            </label>
+                            <input
+                              type="file"
                               name="hindi"
-                      accept="image/*"
-                      onChange={handleEditFileChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    />
+                              accept="image/*"
+                              onChange={handleEditFileChange}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            />
                             {editFormData.newThumbnails.hindi && (
-                      <p className="text-sm text-green-600 mt-1">
-                                New image selected: {editFormData.newThumbnails.hindi.name}
-                      </p>
-                    )}
+                              <div className="mt-2 p-2 bg-green-50 rounded-lg">
+                                <p className="text-sm text-green-700 font-medium">
+                                  ✓ New image selected: {editFormData.newThumbnails.hindi.name}
+                                </p>
+                                <p className="text-xs text-green-600">
+                                  Size: {(editFormData.newThumbnails.hindi.size / 1024 / 1024).toFixed(2)} MB
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1414,7 +1856,17 @@ const ThumbnailPage = () => {
                       disabled={submitting}
                       className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-lg font-medium transition-colors"
                     >
-                      {submitting ? 'Updating...' : selectedLanguage ? `Update ${selectedLanguage.charAt(0).toUpperCase() + selectedLanguage.slice(1)} Thumbnail` : 'Update All Thumbnails'}
+                      {submitting ? 'Updating...' : (() => {
+                        const changes = [];
+                        if (hasTopicChange) changes.push('Topic');
+                        if (hasDepartmentChange) changes.push('Department');
+                        if (hasDoctorChange) changes.push('Doctor');
+                        if (hasNewThumbnails) changes.push('Thumbnails');
+                        
+                        if (changes.length === 0) return 'Update';
+                        if (changes.length === 1) return `Update ${changes[0]}`;
+                        return `Update ${changes.slice(0, -1).join(', ')} and ${changes[changes.length - 1]}`;
+                      })()}
                     </button>
                     <button
                       type="button"
@@ -1423,6 +1875,7 @@ const ThumbnailPage = () => {
                         setEditFormData({ 
                           department: '', 
                           doctor: '', 
+                          topic: '',
                           languages: { telugu: null, english: null, hindi: null },
                           newThumbnails: { telugu: null, english: null, hindi: null }
                         });
@@ -1537,6 +1990,9 @@ const ThumbnailPage = () => {
                         Department
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Topic
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Available Languages
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1546,7 +2002,7 @@ const ThumbnailPage = () => {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredGroupedThumbnails.map((group, index) => (
-                      <tr key={`${group.doctorId}-${index}`} className="hover:bg-gray-50">
+                      <tr key={`${group.doctorId}-${group.topic || 'no-topic'}-${index}`} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {index + 1}
                         </td>
@@ -1581,6 +2037,21 @@ const ThumbnailPage = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {group.departmentName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div className="flex items-center gap-2">
+                            {group.topic ? (
+                              <button
+                                onClick={() => handleTopicView(group.topic)}
+                                className="text-indigo-600 hover:text-indigo-900 px-2 py-1 rounded hover:bg-indigo-50 text-xs font-medium"
+                                title="View Topic Details"
+                              >
+                                View
+                              </button>
+                            ) : (
+                              <span className="text-gray-500 text-sm">N/A</span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           <div className="flex flex-wrap gap-1">
@@ -1652,7 +2123,19 @@ const ThumbnailPage = () => {
                                   });
                                 }
                                 
-                                handleEdit(group);
+                                // Create a proper thumbnail object for editing
+                                const editThumbnail = {
+                                  ...group,
+                                  department: group.departmentId,
+                                  doctor: group.doctorId,
+                                  topic: group.topic,
+                                  teluguThumbnailUrl: group.languages.telugu?.thumbnailUrl,
+                                  englishThumbnailUrl: group.languages.english?.thumbnailUrl,
+                                  hindiThumbnailUrl: group.languages.hindi?.thumbnailUrl
+                                };
+                                
+                                console.log('🔍 Prepared thumbnail for editing:', editThumbnail);
+                                handleEdit(editThumbnail);
                               }}
                               className="text-green-600 hover:text-green-900 px-2 py-1 rounded hover:bg-green-50"
                               title="Edit All Languages"
@@ -1675,6 +2158,7 @@ const ThumbnailPage = () => {
                                     doctorId: group.doctorId,
                                     doctor: group.doctorId,
                                     department: group.departmentId,
+                                    topic: group.topic, // Include topic information
                                     thumbnailUrl: firstThumbnail.thumbnailUrl,
                                     language: firstThumbnail.language,
                                     createdAt: firstThumbnail.createdAt,
@@ -1684,7 +2168,7 @@ const ThumbnailPage = () => {
                                 }
                               }}
                               className="text-red-600 hover:text-red-900 px-2 py-1 rounded hover:bg-red-50"
-                              title={selectedLanguage ? `Delete ${selectedLanguage.charAt(0).toUpperCase() + selectedLanguage.slice(1)} Thumbnail` : "Delete All Languages"}
+                              title={selectedLanguage ? `Delete ${selectedLanguage.charAt(0).toUpperCase() + selectedLanguage.slice(1)} Thumbnail` : `Delete All Languages for Topic "${group.topic || 'No Topic'}"`}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1700,6 +2184,169 @@ const ThumbnailPage = () => {
             )}
           </div>
         </div>
+
+        {/* Custom Delete Confirmation Modal */}
+        {showDeleteModal && thumbnailToDelete && (
+          <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="flex items-center mb-4">
+                <div className="flex-shrink-0">
+                  <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Confirm Deletion
+                  </h3>
+                </div>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-sm text-gray-500 mb-4">
+                  {selectedLanguage ? (
+                    <>
+                      Are you sure you want to delete the <span className="font-semibold text-gray-900">{selectedLanguage.charAt(0).toUpperCase() + selectedLanguage.slice(1)}</span> thumbnail for topic "<span className="font-semibold text-gray-900">{thumbnailToDelete.topic || 'No Topic'}</span>"?
+                    </>
+                  ) : (
+                    <>
+                      Are you sure you want to delete <span className="font-semibold text-gray-900">ALL thumbnails</span> for topic "<span className="font-semibold text-gray-900">{thumbnailToDelete.topic || 'No Topic'}</span>"?
+                    </>
+                  )}
+                </p>
+                
+                {/* <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="text-sm"> */}
+                    {/* <div className="flex justify-between mb-2">
+                      <span className="text-gray-500">Doctor:</span>
+                      <span className="font-medium text-gray-900">{thumbnailToDelete.doctorName || 'Unknown'}</span>
+                    </div>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-500">Department:</span>
+                      <span className="font-medium text-gray-900">{thumbnailToDelete.departmentName || 'Unknown'}</span>
+                    </div> */}
+                    {/* {selectedLanguage && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Language:</span>
+                        <span className="font-medium text-gray-900">{selectedLanguage.charAt(0).toUpperCase() + selectedLanguage.slice(1)}</span>
+                      </div>
+                    )} */}
+                    {/* {!selectedLanguage && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Scope:</span>
+                        <span className="font-medium text-red-600">All Languages (Telugu, English, Hindi)</span>
+                      </div>
+                    )} */}
+                  {/* </div>
+                </div> */}
+                
+                {/* {!selectedLanguage && (
+                  <p className="text-sm text-red-600 mt-3">
+                    ⚠️ This action will remove thumbnails in all languages and cannot be undone.
+                  </p>
+                )} */}
+              </div>
+              
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={cancelDeleteThumbnail}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteThumbnail}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                >
+                  {selectedLanguage ? 'Delete Thumbnail' : `Delete Topic Thumbnails`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Topic View Modal */}
+        {showTopicModal && (
+          <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <svg className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-lg font-medium text-gray-900">
+                      Topic Details
+                    </h3>
+                  </div>
+                </div>
+                <button 
+                  onClick={closeTopicModal}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="mb-6">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-gray-600 mb-2">Topic:</h4>
+                  <p className="text-lg text-gray-900 font-medium">
+                    {selectedTopic}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex justify-end">
+                <button
+                  onClick={closeTopicModal}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Success Modal */}
+        {showSuccessModal && (
+          <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="flex items-center mb-4">
+                <div className="flex-shrink-0">
+                  <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Success
+                  </h3>
+                </div>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-sm text-gray-500">
+                  {successMessage}
+                </p>
+              </div>
+              
+              <div className="flex justify-end">
+                <button
+                  onClick={closeSuccessModal}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </Navbar>
     </ProtectedRoute>
   );

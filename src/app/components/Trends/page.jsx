@@ -9,6 +9,9 @@ const TrendsPage = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTrend, setEditingTrend] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [trendToDelete, setTrendToDelete] = useState(null);
+  const [showAllTrends, setShowAllTrends] = useState(false);
 
   // Fetch trends from API
   const fetchTrends = async () => {
@@ -126,6 +129,9 @@ const TrendsPage = () => {
     return trend.topic.toLowerCase().includes(searchTerm.toLowerCase().trim());
   }).sort((a, b) => b.views - a.views); // Sort by views from highest to lowest
 
+  // Get displayed trends (limited to 10 unless showAllTrends is true)
+  const displayedTrends = showAllTrends ? filteredTrends : filteredTrends.slice(0, 10);
+
   // Handle new trend added or updated
   const handleTrendAdded = (newTrend) => {
     console.log('Trend added/updated:', newTrend);
@@ -163,54 +169,94 @@ const TrendsPage = () => {
   // Handle delete trend
   const handleDeleteTrend = async (id) => {
     console.log('🗑️ Deleting trend with ID:', id);
-    console.log('📋 Trend to delete:', trends.find(t => (t._id || t.id) === id));
+    const trend = trends.find(t => (t._id || t.id) === id);
+    console.log('📋 Trend to delete:', trend);
     console.log('🔍 All trend IDs:', trends.map(t => ({ id: t._id || t.id, topic: t.topic })));
     
-    if (window.confirm('Are you sure you want to delete this trend?')) {
-      try {
-        console.log('🌐 Making DELETE request to:', `/api/trends/${id}`);
+    setTrendToDelete({ id, trend });
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteTrend = async () => {
+    if (!trendToDelete) return;
+    
+    try {
+      console.log('🌐 Making DELETE request to:', `/api/trends/${trendToDelete.id}`);
+      console.log('🗑️ Trend to delete:', trendToDelete.trend);
+      console.log('🔍 All trend IDs:', trends.map(t => ({ id: t._id || t.id, topic: t.topic })));
+      
+      const response = await fetch(`/api/trends/${trendToDelete.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('📡 Delete response status:', response.status);
+      console.log('📡 Delete response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Delete result:', result);
+        console.log('🗑️ Trend deleted successfully from database');
+        setTrends(prev => prev.filter(trend => (trend._id || trend.id) !== trendToDelete.id));
+        alert('Trend deleted successfully!');
         
-        const response = await fetch(`/api/trends/${id}`, {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+        // Notify Dashboard to refresh trending topics
+        window.dispatchEvent(new CustomEvent('trendUpdated'));
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Failed to delete trend from database:', response.status, errorData);
+        console.error('🔍 Response details:', {
+          status: response.status,
+          statusText: response.statusText,
+          url: response.url,
+          errorData,
+          trendId: trendToDelete.id,
+          trendData: trendToDelete.trend
         });
-
-        console.log('📡 Delete response status:', response.status);
-        console.log('📡 Delete response headers:', Object.fromEntries(response.headers.entries()));
-
-        if (response.ok) {
-          const result = await response.json();
-          console.log('✅ Delete result:', result);
-          console.log('🗑️ Trend deleted successfully from database');
-          setTrends(prev => prev.filter(trend => (trend._id || trend.id) !== id));
-          alert('Trend deleted successfully!');
-          
-          // Notify Dashboard to refresh trending topics
-          window.dispatchEvent(new CustomEvent('trendUpdated'));
-        } else {
-          const errorData = await response.json().catch(() => ({}));
-          console.error('❌ Failed to delete trend from database:', response.status, errorData);
-          console.error('🔍 Response details:', {
-            status: response.status,
-            statusText: response.statusText,
-            url: response.url,
-            errorData
-          });
-          alert(`Failed to delete trend: ${errorData.error || 'Unknown error (Status: ' + response.status + ')'}`);
+        
+        // Provide more specific error messages
+        let errorMessage = 'Failed to delete trend';
+        if (response.status === 404) {
+          errorMessage = 'Trend not found. It may have already been deleted.';
+        } else if (response.status === 500) {
+          errorMessage = 'Server error. Please try again later.';
+        } else if (errorData.error) {
+          errorMessage = errorData.error;
         }
-      } catch (error) {
-        console.error('❌ Error deleting trend:', error);
-        alert(`Error deleting trend: ${error.message}`);
+        
+        alert(errorMessage);
       }
+    } catch (error) {
+      console.error('❌ Error deleting trend:', error);
+      alert(`Error deleting trend: ${error.message}`);
+    } finally {
+      setShowDeleteModal(false);
+      setTrendToDelete(null);
     }
+  };
+
+  const cancelDeleteTrend = () => {
+    setShowDeleteModal(false);
+    setTrendToDelete(null);
   };
 
   // Close modal and reset editing state
   const handleCloseModal = () => {
     setShowAddModal(false);
     setEditingTrend(null);
+  };
+
+  // Refresh trends data
+  const refreshTrends = () => {
+    console.log('🔄 Refreshing trends data...');
+    fetchTrends();
+  };
+
+  // Handle Show All button click for trends
+  const handleShowAllTrends = () => {
+    setShowAllTrends(!showAllTrends);
   };
 
   return (
@@ -222,14 +268,6 @@ const TrendsPage = () => {
           <p className="text-sm text-gray-600 mt-1">
             Add YouTube links to trends for dynamic view updates
           </p>
-          {/* Real-time Update Status */}
-          <div className="mt-2 flex items-center gap-2">
-            <div className="flex items-center gap-2 px-3 py-1 bg-green-50 border border-green-200 rounded-full">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-              <span className="text-xs text-green-700 font-medium">Real-time YouTube updates active</span>
-            </div>
-            <span className="text-xs text-gray-500">Every 5 seconds</span>
-          </div>
         </div>
         <div className="flex gap-3">
           <button
@@ -289,6 +327,9 @@ const TrendsPage = () => {
           <div className="mt-3 text-sm text-gray-600">
             Found {filteredTrends.length} trend{filteredTrends.length !== 1 ? 's' : ''} 
             {searchTerm && ` matching "${searchTerm}"`}
+            {filteredTrends.length > 10 && !showAllTrends && (
+              <span className="ml-2 text-blue-600">(Showing first 10)</span>
+            )}
           </div>
         )}
       </div>
@@ -347,7 +388,7 @@ const TrendsPage = () => {
                   </div>
                 </td>
               </tr>
-            ) : filteredTrends.length === 0 ? (
+            ) : displayedTrends.length === 0 ? (
               <tr key="empty-row">
                 <td colSpan="4" className="px-6 py-12 text-center">
                   <div className="flex flex-col items-center gap-3">
@@ -368,7 +409,7 @@ const TrendsPage = () => {
                 </td>
               </tr>
             ) : (
-              filteredTrends.map((trend, index) => (
+              displayedTrends.map((trend, index) => (
                 <tr key={trend._id || trend.id || index} className="hover:bg-gray-50 transition-colors duration-150">
                   <td className="px-6 py-4 text-sm text-gray-700 border-b border-gray-100">
                     {index + 1}
@@ -382,9 +423,6 @@ const TrendsPage = () => {
                       </div>
                       <div>
                         <p className="font-medium text-gray-900">{trend.topic}</p>
-                        {trend.description && (
-                          <p className="text-xs text-gray-500">{trend.description}</p>
-                        )}
                       </div>
                     </div>
                   </td>
@@ -431,6 +469,32 @@ const TrendsPage = () => {
             )}
           </tbody>
         </table>
+        
+        {/* Show All Button */}
+        {filteredTrends.length > 10 && (
+          <div className="p-4 flex justify-center items-center gap-4">
+            <button 
+              onClick={handleShowAllTrends}
+              className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                showAllTrends 
+                  ? 'bg-green-600 hover:bg-green-700 text-white' 
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+              }`}
+            >
+              {showAllTrends ? 'Show Less' : 'Show All'}
+            </button>
+            
+            {showAllTrends ? (
+              <div className="text-sm text-gray-600">
+                Showing all {filteredTrends.length} trends
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600">
+                Showing first 10 of {filteredTrends.length} trends
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* New Trend Form Modal */}
@@ -440,6 +504,45 @@ const TrendsPage = () => {
         onTrendAdded={handleTrendAdded}
         editingTrend={editingTrend}
       />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && trendToDelete && (
+        <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-center mb-4">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-lg font-medium text-gray-900">Confirm Delete</h3>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-sm text-gray-700">
+                Are you sure you want to delete the trend <strong>"{trendToDelete.trend?.topic}"</strong>? This action cannot be undone.
+              </p>
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={confirmDeleteTrend}
+                className="flex-1 bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 transition-colors"
+              >
+                Yes
+              </button>
+              <button
+                onClick={cancelDeleteTrend}
+                className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-400 transition-colors"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

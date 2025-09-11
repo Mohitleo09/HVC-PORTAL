@@ -63,6 +63,7 @@ export async function GET(request) {
       doctor: thumb.doctor?._id,
       doctorName: thumb.doctor?.name,
       language: thumb.language,
+      topic: thumb.topic,
       createdAt: thumb.createdAt,
       updatedAt: thumb.updatedAt
     }));
@@ -110,6 +111,7 @@ export async function POST(request) {
     const formData = await request.formData();
     const department = formData.get('department');
     const doctor = formData.get('doctor');
+    const topic = formData.get('topic');
     const language = formData.get('language');
     const thumbnail = formData.get('thumbnail');
     const userId = formData.get('userId');
@@ -119,6 +121,7 @@ export async function POST(request) {
     console.log('📋 Received form data:', { 
       department, 
       doctor, 
+      topic,
       language,
       userId,
       username,
@@ -167,6 +170,7 @@ export async function POST(request) {
       username: username || 'unknown',
       department,
       doctor,
+      topic,
       doctorName: doctorName || 'Unknown Doctor',
       language,
       thumbnailUrl: base64Data, // Store base64 data as URL

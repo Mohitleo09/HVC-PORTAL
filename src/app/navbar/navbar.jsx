@@ -1,4 +1,3 @@
-
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -93,11 +92,11 @@ const Navbar = ({ children }) => {
   };
 
   const routeToId = (path) => {
-    if (!path) return 'Dashboard';
-    if (path.startsWith('/Userdashboard')) return 'Dashboard';
-    if (path.startsWith('/thumbnail')) return 'Thumbnail';
-    if (path.startsWith('/schedule')) return 'Schedule';
-    return 'Dashboard';
+    if (!path) return 'dashboard';
+    if (path.startsWith('/Userdashboard')) return 'dashboard';
+    if (path.startsWith('/thumbnail')) return 'thumbnail';
+    if (path.startsWith('/schedule')) return 'schedule';
+    return 'dashboard';
   };
 
   const activeItem = routeToId(pathname);
@@ -115,12 +114,12 @@ const Navbar = ({ children }) => {
         await trackPageNavigation(
           sessionInfo.currentUser.userId,
           sessionInfo.currentUser.username,
-          item.label, // toPage
-          activeItem  // fromPage
+          item.label,
+          activeItem
         );
       }
     } catch (error) {
-      console.warn('⚠️ Failed to track navigation activity:', error);
+      console.warn('⚠ Failed to track navigation activity:', error);
     }
     
     router.push(item.path);

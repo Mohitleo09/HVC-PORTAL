@@ -34,20 +34,20 @@ export async function POST(request) {
 
     await DBConnection();
     const body = await request.json();
-    const { title, description, category, tags } = body;
+    const { topic, views, youtubeLink, status } = body;
 
-    if (!title || !description || !category) {
+    if (!topic) {
       return NextResponse.json(
-        { error: 'Title, description, and category are required' },
+        { error: 'Title is required' },
         { status: 400 }
       );
     }
 
     const newTrend = new Trend({
-      title,
-      description,
-      category,
-      tags: tags || []
+      topic,
+      views: views || 0,
+      youtubeLink: youtubeLink || '',
+      status: status || 'Active'
     });
 
     const savedTrend = await newTrend.save();

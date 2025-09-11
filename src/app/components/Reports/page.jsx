@@ -232,7 +232,6 @@ const ReportsPage = () => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <h2 className="text-xl font-semibold text-gray-900">Loading Reports...</h2>
-          <p className="text-gray-600">Please wait while we fetch your workflow data.</p>
         </div>
       </div>
     );
@@ -573,7 +572,7 @@ const ReportsPage = () => {
 
       {/* Workflow Details Modal */}
       {showWorkflowDetails && selectedWorkflow && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 flex items-center bg-black/50 justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-100">
             <div className="p-8">
               {/* Header with gradient background */}

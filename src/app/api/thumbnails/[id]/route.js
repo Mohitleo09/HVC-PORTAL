@@ -117,6 +117,7 @@ export async function PATCH(request, { params }) {
     const formData = await request.formData();
     const department = formData.get('department');
     const doctor = formData.get('doctor');
+    const topic = formData.get('topic');
     const language = formData.get('language');
     const thumbnail = formData.get('thumbnail');
 
@@ -124,6 +125,7 @@ export async function PATCH(request, { params }) {
       id,
       department, 
       doctor, 
+      topic,
       language,
       hasNewThumbnail: !!thumbnail
     });
@@ -154,6 +156,7 @@ export async function PATCH(request, { params }) {
     const updateData = {
       department,
       doctor,
+      topic: topic || '', // Include topic field, default to empty string if not provided
       language
     };
 
@@ -219,6 +222,7 @@ export async function PATCH(request, { params }) {
           changes: {
             department: existingThumbnail.department?.toString() !== department,
             doctor: existingThumbnail.doctor?.toString() !== doctor,
+            topic: existingThumbnail.topic !== (topic || ''),
             language: existingThumbnail.language !== language,
             thumbnail: !!thumbnail
           }
@@ -231,6 +235,7 @@ export async function PATCH(request, { params }) {
         previousValues: {
           department: existingThumbnail.department?.toString(),
           doctor: existingThumbnail.doctor?.toString(),
+          topic: existingThumbnail.topic,
           language: existingThumbnail.language,
           fileSize: existingThumbnail.fileSize,
           fileType: existingThumbnail.mimeType,
@@ -239,6 +244,7 @@ export async function PATCH(request, { params }) {
         newValues: {
           department: department,
           doctor: doctor,
+          topic: topic || '',
           language: language,
           fileSize: thumbnail ? thumbnail.size : existingThumbnail.fileSize,
           fileType: thumbnail ? thumbnail.type : existingThumbnail.mimeType,
@@ -267,6 +273,7 @@ export async function PATCH(request, { params }) {
       doctor: populatedThumbnail.doctor?._id,
       doctorName: populatedThumbnail.doctor?.name,
       language: populatedThumbnail.language,
+      topic: populatedThumbnail.topic, // Include topic in response
       createdAt: populatedThumbnail.createdAt,
       updatedAt: populatedThumbnail.updatedAt
     };

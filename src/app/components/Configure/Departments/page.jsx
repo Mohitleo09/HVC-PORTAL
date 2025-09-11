@@ -253,13 +253,13 @@ const DepartmentsPage = () => {
           >
             Debug Info
           </button> */}
-          <button 
+          {/* <button 
             onClick={fetchDepartments} 
             className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
             disabled={loading}
           >
             {loading ? 'Loading...' : 'Refresh'}
-          </button>
+          </button> */}
           <button onClick={() => setAddOpen(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
             <span className="text-lg">+</span>
             <span>Add Department</span>

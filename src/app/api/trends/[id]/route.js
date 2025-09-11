@@ -49,18 +49,18 @@ export async function PUT(request, { params }) {
 
     await DBConnection();
     const body = await request.json();
-    const { title, description, category, tags } = body;
+    const { topic, views, youtubeLink, status } = body;
 
-    if (!title || !description || !category) {
+    if (!topic) {
       return NextResponse.json(
-        { error: 'Title, description, and category are required' },
+        { error: 'Title is required' },
         { status: 400 }
       );
     }
 
     const updatedTrend = await Trend.findByIdAndUpdate(
       id,
-      { title, description, category, tags: tags || [] },
+      { topic, views: views || 0, youtubeLink: youtubeLink || '', status: status || 'Active' },
       { new: true, runValidators: true }
     );
 
@@ -85,8 +85,11 @@ export async function PUT(request, { params }) {
 export async function DELETE(request, { params }) {
   try {
     const { id } = params;
+    
+    console.log('🗑️ DELETE request for trend ID:', id);
 
     if (!MONGODB_URI) {
+      console.error('❌ Database not configured');
       return NextResponse.json(
         { error: 'Database not configured' },
         { status: 500 }
@@ -94,20 +97,41 @@ export async function DELETE(request, { params }) {
     }
 
     await DBConnection();
-    const deletedTrend = await Trend.findByIdAndDelete(id);
-
-    if (!deletedTrend) {
+    
+    // First check if the trend exists
+    const existingTrend = await Trend.findById(id);
+    console.log('🔍 Existing trend:', existingTrend ? 'Found' : 'Not found');
+    
+    if (!existingTrend) {
+      console.error('❌ Trend not found with ID:', id);
       return NextResponse.json(
-        { error: 'Trend not found' },
+        { error: 'Trend not found', id: id },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({ message: 'Trend deleted successfully' });
+    const deletedTrend = await Trend.findByIdAndDelete(id);
+    console.log('✅ Trend deleted successfully:', deletedTrend ? 'Yes' : 'No');
+
+    if (!deletedTrend) {
+      console.error('❌ Failed to delete trend with ID:', id);
+      return NextResponse.json(
+        { error: 'Failed to delete trend', id: id },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ 
+      message: 'Trend deleted successfully',
+      deletedTrend: {
+        id: deletedTrend._id,
+        topic: deletedTrend.topic
+      }
+    });
   } catch (error) {
-    console.error('Error deleting trend:', error);
+    console.error('❌ Error deleting trend:', error);
     return NextResponse.json(
-      { error: 'Failed to delete trend' },
+      { error: 'Failed to delete trend', details: error.message },
       { status: 500 }
     );
   }

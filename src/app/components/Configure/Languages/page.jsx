@@ -9,6 +9,7 @@ const LanguagesPage = () => {
   const [error, setError] = useState('');
   const [editingLanguage, setEditingLanguage] = useState(null);
   const [editName, setEditName] = useState('');
+  const [showEditModal, setShowEditModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   // Fetch languages from database
@@ -44,6 +45,7 @@ const LanguagesPage = () => {
   const handleEdit = (language) => {
     setEditingLanguage(language);
     setEditName(language.name);
+    setShowEditModal(true);
   };
 
   const handleEditSave = async () => {
@@ -68,6 +70,7 @@ const LanguagesPage = () => {
         updateLanguage(editingLanguage._id || editingLanguage.id, { name: editName.trim() });
         setEditingLanguage(null);
         setEditName('');
+        setShowEditModal(false);
         alert('Language updated successfully!');
         
         // Dispatch event to notify other components
@@ -84,6 +87,7 @@ const LanguagesPage = () => {
   const handleEditCancel = () => {
     setEditingLanguage(null);
     setEditName('');
+    setShowEditModal(false);
   };
 
   const handleDelete = async (id) => {
@@ -174,13 +178,13 @@ const LanguagesPage = () => {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">Configure - Languages</h1>
         <div className="flex items-center gap-4">
-          <button 
+          {/* <button 
             onClick={fetchLanguages} 
             className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
             disabled={loading}
           >
             {loading ? 'Loading...' : 'Refresh'}
-          </button>
+          </button> */}
           <button onClick={() => setAddOpen(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
             <span className="text-lg">+</span>
             <span>Add Language</span>
@@ -203,6 +207,41 @@ const LanguagesPage = () => {
             </div>
             <div className="p-6">
               <AddLanguage onCreate={handleCreate} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Language Modal */}
+      {showEditModal && editingLanguage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md bg-white rounded shadow-lg p-6">
+            <h3 className="text-xl font-semibold mb-4">Edit Language</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Language Name
+              </label>
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter language name"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={handleEditCancel}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSave}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>
@@ -259,30 +298,7 @@ const LanguagesPage = () => {
                 <tr key={lang._id || lang.id}>
                   <td className="px-4 py-3 border">{index + 1}</td>
                   <td className="px-4 py-3 border">
-                    {editingLanguage && editingLanguage._id === lang._id ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          className="px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                        <button
-                          onClick={handleEditSave}
-                          className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs"
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={handleEditCancel}
-                          className="px-2 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 text-xs"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      lang.name
-                    )}
+                    {lang.name}
                   </td>
                   <td className="px-4 py-3 border">
                     {lang.status === 'Active' ? (
@@ -293,14 +309,12 @@ const LanguagesPage = () => {
                   </td>
                   <td className="px-4 py-3 border">
                     <div className="flex gap-2">
-                      {!editingLanguage || editingLanguage._id !== lang._id ? (
-                        <button
-                          onClick={() => handleEdit(lang)}
-                          className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded"
-                        >
-                          Edit
-                        </button>
-                      ) : null}
+                      <button
+                        onClick={() => handleEdit(lang)}
+                        className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded"
+                      >
+                        Edit
+                      </button>
                       <button
                         onClick={() => handleDelete(lang._id || lang.id)}
                         className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"

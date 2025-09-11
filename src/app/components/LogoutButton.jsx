@@ -9,30 +9,33 @@ const LogoutButton = ({ className = '', children }) => {
 
   const handleLogout = async () => {
     try {
-      // Track logout activity before signing out
-      try {
-        const sessionInfo = getCurrentSessionInfo();
-        if (sessionInfo.currentUser && sessionInfo.currentUser.userId) {
-          await trackLogout(sessionInfo.currentUser.userId, sessionInfo.currentUser.username);
-        }
-      } catch (error) {
-        console.warn('⚠️ Failed to track logout activity:', error);
-      }
-      
-      await signOut({ 
-        redirect: false,
-        callbackUrl: '/login'
-      });
-      
-      // Clear any local storage and session storage
+      // Clear storage immediately for faster logout
       if (typeof window !== 'undefined') {
         localStorage.removeItem('user');
         localStorage.removeItem('isLoggedIn');
         sessionStorage.clear();
       }
       
-      // Redirect to login page
+      // Sign out immediately
+      await signOut({ 
+        redirect: false,
+        callbackUrl: '/login'
+      });
+      
+      // Redirect to login page immediately
       router.push('/login');
+      
+      // Track logout activity in background (non-blocking)
+      try {
+        const sessionInfo = getCurrentSessionInfo();
+        if (sessionInfo.currentUser && sessionInfo.currentUser.userId) {
+          trackLogout(sessionInfo.currentUser.userId, sessionInfo.currentUser.username).catch(error => {
+            console.warn('⚠️ Failed to track logout activity:', error);
+          });
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to track logout activity:', error);
+      }
     } catch (error) {
       console.error('Logout error:', error);
     }

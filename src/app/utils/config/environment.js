@@ -5,8 +5,8 @@ export const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://Hvcpotal:12
 
 export const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET || "12345";
 
-// Use port 3002 to avoid conflicts
-export const NEXTAUTH_URL = process.env.NEXTAUTH_URL || "http://localhost:3002";
+// Use current dev port (updated to 3003)
+export const NEXTAUTH_URL = process.env.NEXTAUTH_URL || "http://localhost:3003";
 
 export const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || "AIzaSyA5t4d6c-vCkNh-hknavTfAvNroRUI0a2k";
 

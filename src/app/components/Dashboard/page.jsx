@@ -23,6 +23,10 @@ const DashboardPage = () => {
   const [thumbnailCount, setThumbnailCount] = useState(0);
   const [completedWorkflows, setCompletedWorkflows] = useState(0);
   const [pendingWorkflows, setPendingWorkflows] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
 
   // Helper function to retry failed API calls
   const retryFetch = async (fetchFunction, maxRetries = 3, delay = 1000) => {
@@ -347,6 +351,87 @@ const DashboardPage = () => {
     fetchThumbnailCount();
   };
 
+  // Search function to fetch data from doctors and departments
+  const searchData = async (searchQuery) => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      // Fetch doctors data
+      const doctorsResponse = await fetch('/api/doctors');
+      const doctorsData = await doctorsResponse.json();
+      
+      // Fetch departments data
+      const departmentsResponse = await fetch('/api/departments');
+      const departmentsData = await departmentsResponse.json();
+
+      const searchLower = searchQuery.toLowerCase();
+      const results = [];
+
+      // Search in doctors
+      if (doctorsData.doctors) {
+        const matchingDoctors = doctorsData.doctors.filter(doctor => 
+          doctor.name?.toLowerCase().includes(searchLower) ||
+          doctor.department?.toLowerCase().includes(searchLower) ||
+          doctor.email?.toLowerCase().includes(searchLower) ||
+          doctor.phone?.toLowerCase().includes(searchLower)
+        );
+        
+        matchingDoctors.forEach(doctor => {
+          results.push({
+            type: 'doctor',
+            id: doctor._id || doctor.id,
+            name: doctor.name,
+            department: doctor.department,
+            email: doctor.email,
+            phone: doctor.phone,
+            status: doctor.status,
+            specialization: doctor.specialization
+          });
+        });
+      }
+
+      // Search in departments
+      if (departmentsData.departments) {
+        const matchingDepartments = departmentsData.departments.filter(dept => 
+          dept.name?.toLowerCase().includes(searchLower) ||
+          dept.description?.toLowerCase().includes(searchLower)
+        );
+        
+        matchingDepartments.forEach(dept => {
+          results.push({
+            type: 'department',
+            id: dept._id || dept.id,
+            name: dept.name,
+            description: dept.description,
+            status: dept.status
+          });
+        });
+      }
+
+      setSearchResults(results);
+      setShowSearchResults(true);
+    } catch (error) {
+      console.error('Error searching data:', error);
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // Handle search input change with debounce
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      searchData(searchTerm);
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
+
   // Handle Show All button click for upcoming schedules
   const handleShowAllUpcoming = () => {
     setShowAllUpcomingSchedules(!showAllUpcomingSchedules);
@@ -406,6 +491,16 @@ const DashboardPage = () => {
       }
     })
     .filter(schedule => {
+      // Search filter
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const doctorMatch = schedule.doctor?.toLowerCase().includes(searchLower);
+        const departmentMatch = schedule.department?.toLowerCase().includes(searchLower);
+        if (!doctorMatch && !departmentMatch) {
+          return false;
+        }
+      }
+      
       if (scheduleFilter === 'all') return true;
       
       try {
@@ -462,6 +557,16 @@ const DashboardPage = () => {
     return schedules
       .filter(schedule => schedule && schedule.date)
       .filter(schedule => {
+        // Search filter
+        if (searchTerm) {
+          const searchLower = searchTerm.toLowerCase();
+          const doctorMatch = schedule.doctor?.toLowerCase().includes(searchLower);
+          const departmentMatch = schedule.department?.toLowerCase().includes(searchLower);
+          if (!doctorMatch && !departmentMatch) {
+            return false;
+          }
+        }
+        
         if (scheduleFilter === 'all') return true;
         
         try {
@@ -540,7 +645,7 @@ const DashboardPage = () => {
     { 
       id: 3, 
       label: "Completed Workflows", 
-      value: completedWorkflows, 
+      value: loading ? "..." : completedWorkflows, 
       border: "border-green-200",
       bgColor: "bg-gradient-to-br from-gray-50 to-gray-100",
       textColor: "text-gray-700",
@@ -553,7 +658,7 @@ const DashboardPage = () => {
     { 
       id: 4, 
       label: "Pending Workflows", 
-      value: pendingWorkflows, 
+      value: loading ? "..." : pendingWorkflows, 
       border: "border-yellow-200",
       bgColor: "bg-gradient-to-br from-gray-50 to-gray-100",
       textColor: "text-gray-700",
@@ -566,7 +671,7 @@ const DashboardPage = () => {
     { 
       id: 5, 
       label: "Total No Of Thumbnails", 
-      value: thumbnailCount, 
+      value: loading ? "..." : thumbnailCount, 
       border: "border-purple-200",
       bgColor: "bg-gradient-to-br from-gray-50 to-gray-100",
       textColor: "text-gray-700",
@@ -580,6 +685,144 @@ const DashboardPage = () => {
 
   return (
     <div className="p-6 space-y-8">
+      {/* Search Bar */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search doctors or departments..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex-1 px-2 py-1 text-sm border-0 focus:outline-none placeholder-gray-400"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setSearchResults([]);
+                setShowSearchResults(false);
+              }}
+              className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+        {searchTerm && (
+          <div className="mt-1 text-xs text-gray-500">
+            {searchLoading ? 'Searching...' : `${searchResults.length} results found`}
+          </div>
+        )}
+      </div>
+
+      {/* Search Results */}
+      {showSearchResults && searchTerm && (
+        <div className="bg-white rounded-xl shadow overflow-hidden">
+          <div className="p-4 border-b bg-gray-50">
+            <h3 className="text-lg font-semibold text-gray-800">
+              Search Results for "{searchTerm}"
+            </h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Found {searchResults.length} results from doctors and departments
+            </p>
+          </div>
+          
+          {searchLoading ? (
+            <div className="p-8 text-center">
+              <div className="flex flex-col items-center gap-3">
+                <svg className="animate-spin h-6 w-6 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span className="text-gray-600 text-sm">Searching...</span>
+              </div>
+            </div>
+          ) : searchResults.length === 0 ? (
+            <div className="p-8 text-center">
+              <div className="flex flex-col items-center gap-3">
+                <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <div className="text-center">
+                  <p className="text-gray-600 font-medium">No results found</p>
+                  <p className="text-gray-500 text-sm">Try searching with different keywords</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200">
+              {searchResults.map((result, index) => (
+                <div key={`${result.type}-${result.id}-${index}`} className="p-4 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          result.type === 'doctor' 
+                            ? 'bg-blue-100 text-blue-800' 
+                            : 'bg-green-100 text-green-800'
+                        }`}>
+                          {result.type === 'doctor' ? 'Doctor' : 'Department'}
+                        </div>
+                        <h4 className="text-lg font-semibold text-gray-900">{result.name}</h4>
+                        {result.status && (
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            result.status === 'Active' 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {result.status}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                        {result.type === 'doctor' ? (
+                          <>
+                            {result.department && (
+                              <div>
+                                <span className="font-medium">Department:</span> {result.department}
+                              </div>
+                            )}
+                            {result.specialization && (
+                              <div>
+                                <span className="font-medium">Specialization:</span> {result.specialization}
+                              </div>
+                            )}
+                            {result.email && (
+                              <div>
+                                <span className="font-medium">Email:</span> {result.email}
+                              </div>
+                            )}
+                            {result.phone && (
+                              <div>
+                                <span className="font-medium">Phone:</span> {result.phone}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {result.description && (
+                              <div className="col-span-2">
+                                <span className="font-medium">Description:</span> {result.description}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
         {stats.map((s) => (
@@ -597,39 +840,6 @@ const DashboardPage = () => {
                 <div className="flex-1">
                   <h3 className={`text-lg font-semibold ${s.textColor}`}>{s.label}</h3>
                 </div>
-                {s.id === 3 && (
-                  <button
-                    onClick={refreshWorkflowCounts}
-                    className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                    title="Refresh completed workflow count"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </button>
-                )}
-                {s.id === 4 && (
-                  <button
-                    onClick={refreshWorkflowCounts}
-                    className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                    title="Refresh pending workflow count"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </button>
-                )}
-                {s.id === 5 && (
-                  <button
-                    onClick={refreshThumbnailCount}
-                    className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                    title="Refresh thumbnail count"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </button>
-                )}
               </div>
               
               {/* Value */}
@@ -647,9 +857,6 @@ const DashboardPage = () => {
                       <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                       Active
                     </span>
-                    <span className="text-gray-500">
-                      Total: {totalDoctorCount}
-                    </span>
                   </div>
                 )}
               </div>
@@ -658,58 +865,10 @@ const DashboardPage = () => {
         ))}
       </div>
 
-
-
-      {/* Doctor Status Summary */}
-      {/* {totalDoctorCount > 0 && (
-        <div className="bg-white rounded-xl shadow p-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-800">Doctor Status Summary</h3>
-            <button
-              onClick={refreshDoctorCount}
-              className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-              title="Refresh doctor status"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mt-3">
-            <div className="text-center p-3 bg-green-50 rounded-lg border border-green-200">
-              <div className="text-2xl font-bold text-green-600">{doctorCount}</div>
-              <div className="text-sm text-green-700 font-medium">Active Doctors</div>
-              <div className="text-xs text-green-600 mt-1">Currently Available</div>
-            </div>
-            <div className="text-center p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="text-2xl font-bold text-gray-600">{totalDoctorCount - doctorCount}</div>
-              <div className="text-sm text-gray-700 font-medium">Inactive Doctors</div>
-              <div className="text-xs text-gray-600 mt-1">Temporarily Unavailable</div>
-            </div>
-          </div>
-        </div>
-      )} */}
-
-      {/* Controls (icon placeholders) */}
-      {/* <div className="flex justify-end gap-2">
-        <button className="w-10 h-10 rounded-md border bg-white shadow-sm" title="Grid" />
-        <button className="w-10 h-10 rounded-md border bg-white shadow-sm" title="List" />
-        <button className="w-10 h-10 rounded-md border bg-white shadow-sm" title="Filter" />
-      </div> */}
-
       {/* Upcoming Schedule */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold">Upcoming Schedule</h2>
-          <button
-            onClick={refreshSchedules}
-            className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-            title="Refresh schedules"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
         </div>
         
         {/* Schedule Filter Options */}
@@ -924,20 +1083,22 @@ const DashboardPage = () => {
                       </svg>
                       <div className="text-center">
                         <p className="text-gray-600 font-medium">
-                          {scheduleFilter === 'all' && 'No schedules found'}
-                          {scheduleFilter === 'day' && 'No schedules for today'}
-                          {scheduleFilter === 'week' && 'No schedules for this week'}
-                          {scheduleFilter === 'month' && 'No schedules for this month'}
-                          {scheduleFilter === 'customWeek' && selectedWeek && `No schedules for week of ${formatWeekRange(selectedWeek)}`}
-                          {scheduleFilter === 'customMonth' && selectedMonth && `No schedules for ${formatMonth(selectedMonth)}`}
+                          {searchTerm && 'No schedules found matching your search'}
+                          {!searchTerm && scheduleFilter === 'all' && 'No schedules found'}
+                          {!searchTerm && scheduleFilter === 'day' && 'No schedules for today'}
+                          {!searchTerm && scheduleFilter === 'week' && 'No schedules for this week'}
+                          {!searchTerm && scheduleFilter === 'month' && 'No schedules for this month'}
+                          {!searchTerm && scheduleFilter === 'customWeek' && selectedWeek && `No schedules for week of ${formatWeekRange(selectedWeek)}`}
+                          {!searchTerm && scheduleFilter === 'customMonth' && selectedMonth && `No schedules for ${formatMonth(selectedMonth)}`}
                         </p>
                         <p className="text-gray-500 text-sm">
-                          {scheduleFilter === 'all' && 'Create your first schedule to get started!'}
-                          {scheduleFilter === 'day' && 'Try selecting a different time period or create new schedules'}
-                          {scheduleFilter === 'week' && 'Try selecting a different time period or create new schedules'}
-                          {scheduleFilter === 'month' && 'Try selecting a different time period or create new schedules'}
-                          {scheduleFilter === 'customWeek' && 'Try selecting a different week or create new schedules'}
-                          {scheduleFilter === 'customMonth' && 'Try selecting a different month or create new schedules'}
+                          {searchTerm && 'Try searching with different keywords or clear the search'}
+                          {!searchTerm && scheduleFilter === 'all' && 'Create your first schedule to get started!'}
+                          {!searchTerm && scheduleFilter === 'day' && 'Try selecting a different time period or create new schedules'}
+                          {!searchTerm && scheduleFilter === 'week' && 'Try selecting a different time period or create new schedules'}
+                          {!searchTerm && scheduleFilter === 'month' && 'Try selecting a different time period or create new schedules'}
+                          {!searchTerm && scheduleFilter === 'customWeek' && 'Try selecting a different week or create new schedules'}
+                          {!searchTerm && scheduleFilter === 'customMonth' && 'Try selecting a different month or create new schedules'}
                         </p>
                       </div>
                     </div>
@@ -984,5 +1145,3 @@ const DashboardPage = () => {
 };
 
 export default DashboardPage;
-
-

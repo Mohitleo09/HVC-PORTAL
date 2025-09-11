@@ -267,7 +267,7 @@ const QuestionBankPage = () => {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">Questions</h1>
         <div className="flex gap-2">
-          <button 
+          {/* <button 
             onClick={loadQuestions} 
             disabled={loading}
             className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded flex items-center gap-2"
@@ -288,7 +288,7 @@ const QuestionBankPage = () => {
                 Refresh
               </>
             )}
-          </button>
+          </button> */}
           <button onClick={() => setAddOpen(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
             <span className="text-lg">+</span>
             <span>Add Question</span>

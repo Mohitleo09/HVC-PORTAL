@@ -26,6 +26,11 @@ const thumbnailSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  topic: {
+    type: String,
+    required: false,
+    index: true
+  },
   language: {
     type: String,
     enum: ['english', 'telugu', 'hindi'],
@@ -61,6 +66,7 @@ thumbnailSchema.index({ userId: 1, timestamp: -1 });
 thumbnailSchema.index({ username: 1, timestamp: -1 });
 thumbnailSchema.index({ doctorName: 1, timestamp: -1 });
 thumbnailSchema.index({ department: 1, doctor: 1 });
+thumbnailSchema.index({ topic: 1 });
 thumbnailSchema.index({ status: 1 });
 
 const Thumbnail = mongoose.models.Thumbnail || mongoose.model('Thumbnail', thumbnailSchema);

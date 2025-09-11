@@ -5,7 +5,7 @@ import 'react-toastify/dist/ReactToastify.css';
 
 export default function RolesPermission() {
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -28,6 +28,8 @@ export default function RolesPermission() {
   const [selectedUserSchedules, setSelectedUserSchedules] = useState([]);
   const [selectedUserForActivity, setSelectedUserForActivity] = useState(null);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
 
   useEffect(() => {
     fetchUsers();
@@ -255,16 +257,20 @@ export default function RolesPermission() {
     }
   };
 
-  const handleDeleteUser = async (userId) => {
-    if (!confirm("Are you sure you want to delete this user?")) return;
+  const handleDeleteUser = async (userId, username) => {
+    setUserToDelete({ userId, username });
+    setShowDeleteModal(true);
+  };
 
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    
     try {
-      const response = await fetch(`/api/users?userId=${userId}`, {
+      const response = await fetch(`/api/users?userId=${userToDelete.userId}`, {
         method: "DELETE",
       });
 
       if (response.ok) {
-        toast.success("User deleted successfully!");
         fetchUsers();
       } else {
         const error = await response.json();
@@ -273,15 +279,18 @@ export default function RolesPermission() {
     } catch (error) {
       console.error("Error deleting user:", error);
       toast.error("Failed to delete user");
+    } finally {
+      setShowDeleteModal(false);
+      setUserToDelete(null);
     }
   };
 
-  const handleStatusChange = async (userId, newStatus, username) => {
-    const action = newStatus === 'active' ? 'activate' : 'deactivate';
-    const confirmMessage = `Are you sure you want to ${action} user "${username}"?`;
-    
-    if (!confirm(confirmMessage)) return;
+  const cancelDeleteUser = () => {
+    setShowDeleteModal(false);
+    setUserToDelete(null);
+  };
 
+  const handleStatusChange = async (userId, newStatus, username) => {
     try {
       const response = await fetch("/api/users", {
         method: "PUT",
@@ -295,6 +304,7 @@ export default function RolesPermission() {
       });
 
       if (response.ok) {
+        const action = newStatus === 'active' ? 'activate' : 'deactivate';
         toast.success(`User "${username}" ${action}d successfully!`);
         if (newStatus === 'deactivated') {
           toast.info("Deactivated users will not be able to access their dashboard until reactivated.");
@@ -302,13 +312,14 @@ export default function RolesPermission() {
         fetchUsers();
       } else {
         const error = await response.json();
-        toast.error(error.error || `Failed to ${action} user`);
+        toast.error(error.error || `Failed to ${newStatus === 'active' ? 'activate' : 'deactivate'} user`);
       }
     } catch (error) {
       console.error("Error updating user status:", error);
-      toast.error(`Failed to ${action} user`);
+      toast.error(`Failed to ${newStatus === 'active' ? 'activate' : 'deactivate'} user`);
     }
   };
+
 
   const openEditModal = (user) => {
     setSelectedUser(user);
@@ -328,6 +339,7 @@ export default function RolesPermission() {
     setFormErrors({});
     setSelectedUser(null);
   };
+
 
   const viewUserActivity = async (userId, username) => {
     try {
@@ -370,14 +382,6 @@ export default function RolesPermission() {
       setActivityLoading(false);
     }
   };
-
-  if (loading) {
-    return (
-      <div className="p-6 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
 
   return (
     <div className="p-6">
@@ -569,7 +573,7 @@ export default function RolesPermission() {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleDeleteUser(user._id)}
+                            onClick={() => handleDeleteUser(user._id, user.username)}
                             className="text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-3 py-1 rounded-md text-xs transition-colors"
                           >
                             Delete
@@ -600,16 +604,16 @@ export default function RolesPermission() {
           </tbody>
         </table>
       </div>
-      {users.length === 0 && (
+      {/* {users.length === 0 && (
         <div className="text-center py-8 text-gray-500">
           No users found. Add a new user to get started.
         </div>
-      )}
+      )} */}
     </div>
 
              {/* Add User Modal */}
        {showAddModal && (
-         <div className="fixed inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-50">
+         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
            <div className="bg-white rounded-lg shadow-2xl border border-gray-200 p-6 w-full max-w-md mx-4 transform transition-all duration-300 scale-100">
              <h2 className="text-xl font-bold mb-4">Add New User</h2>
              
@@ -710,7 +714,7 @@ export default function RolesPermission() {
 
       {/* Edit User Modal */}
       {showEditModal && selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">Edit User</h2>
             <form onSubmit={handleEditUser}>
@@ -898,6 +902,47 @@ export default function RolesPermission() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && userToDelete && (
+        <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-center mb-4">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-lg font-medium text-gray-900">Confirm Delete</h3>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-sm text-gray-700">
+                Are you sure you want to delete user <strong>{userToDelete.username}</strong> ? 
+              </p>
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={cancelDeleteUser}
+                className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-400 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteUser}
+                className="flex-1 bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
     </div>
   );
 }

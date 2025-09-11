@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 
 const UsersPage = () => {
      const [users, setUsers] = useState([]);
-   const [loading, setLoading] = useState(true);
+   const [loading, setLoading] = useState(false);
    const [searchTerm, setSearchTerm] = useState('');
    const [error, setError] = useState(null);
    const [lastUpdated, setLastUpdated] = useState(null);
@@ -98,7 +98,7 @@ const UsersPage = () => {
                id: user._id || user.id,
                name: user.name || user.username,
                email: user.email,
-               department: user.department || 'General',
+              //  department: user.department || 'General',
                username: user.username,
                isCurrentlyLoggedIn,
                status: user.status || 'Active',
@@ -139,7 +139,39 @@ const UsersPage = () => {
   // Helper function to format thumbnail activity display text
   const getThumbnailActivityDisplayText = (activity) => {
     const action = activity.action.replace('thumbnail_', '');
-    const doctorName = activity.doctorName || 'Unknown Doctor';
+    
+    // Try to get doctor name from various possible fields with more comprehensive search
+    let doctorName = activity.doctorName || 
+                    activity.doctor?.name || 
+                    activity.doctor?.doctorName ||
+                    activity.details?.doctorName ||
+                    activity.details?.doctor?.name ||
+                    activity.metadata?.doctorName ||
+                    activity.data?.doctorName ||
+                    activity.doctorName ||
+                    activity.doctor?.fullName ||
+                    activity.doctor?.displayName ||
+                    activity.doctor?.title ||
+                    activity.doctor?.firstName + ' ' + activity.doctor?.lastName ||
+                    activity.doctor?.first_name + ' ' + activity.doctor?.last_name;
+    
+    // Clean up the doctor name if it exists
+    if (doctorName && doctorName.trim() && doctorName !== 'null' && doctorName !== 'undefined') {
+      doctorName = doctorName.trim();
+    } else {
+      doctorName = null;
+    }
+    
+    // If still no doctor name, try to extract from other fields
+    if (!doctorName) {
+      // Check if there's a doctor ID that we can use
+      const doctorId = activity.doctorId || activity.doctor?.id || activity.details?.doctorId;
+      if (doctorId && doctorId !== 'null' && doctorId !== 'undefined') {
+        doctorName = `Doctor ID: ${doctorId}`;
+      } else {
+        doctorName = 'Unknown Doctor';
+      }
+    }
     
     switch (action) {
       case 'create':
@@ -174,7 +206,27 @@ const UsersPage = () => {
   // Helper function to format schedule activity display text
   const getScheduleActivityDisplayText = (activity) => {
     const action = activity.action;
-    const doctorName = activity.doctorName || 'Unknown Doctor';
+    
+    // Try to get doctor name from various possible fields
+    let doctorName = activity.doctorName || 
+                    activity.doctor?.name || 
+                    activity.doctor?.doctorName ||
+                    activity.details?.doctorName ||
+                    activity.details?.doctor?.name ||
+                    activity.metadata?.doctorName ||
+                    activity.data?.doctorName;
+    
+    // If still no doctor name, try to extract from other fields
+    if (!doctorName) {
+      // Check if there's a doctor ID that we can use
+      const doctorId = activity.doctorId || activity.doctor?.id || activity.details?.doctorId;
+      if (doctorId) {
+        doctorName = `Doctor ID: ${doctorId}`;
+      } else {
+        doctorName = 'Unknown Doctor';
+      }
+    }
+    
     const stepName = activity.stepName || '';
     const stepNumber = activity.stepNumber || '';
     
@@ -199,17 +251,17 @@ const UsersPage = () => {
       setActivityLoading(true);
       setSelectedUserForActivity({ userId, username });
       
-      console.log('🔍 Fetching INDIVIDUAL user activities for:', username, 'ID:', userId);
+      console.log('🔍 Fetching user activities for:', username, 'ID:', userId);
       
-      // Fetch user activities, thumbnail activities, and schedule activities
-      const [userResponse, thumbnailResponse, scheduleResponse] = await Promise.all([
-        fetch(`/api/user-activity?userId=${userId}&username=${username}&limit=100`),
-        fetch(`/api/thumbnail-activity?userId=${userId}&username=${username}&limit=100`),
-        fetch(`/api/schedule-activity?userId=${userId}&username=${username}&limit=100`)
+      // Fetch from both user-activity and thumbnail-activity endpoints, and doctors for enrichment
+      const [userResponse, thumbnailResponse, doctorsResponse] = await Promise.all([
+        fetch(`/api/user-activity?userId=${userId}&username=${username}&limit=200`),
+        fetch(`/api/thumbnail-activity?userId=${userId}&username=${username}&limit=200`),
+        fetch('/api/doctors')
       ]);
-
-        let allActivities = [];
-        
+      
+      let allActivities = [];
+      
       // Process user activities
       if (userResponse.ok) {
         const userData = await userResponse.json();
@@ -222,68 +274,150 @@ const UsersPage = () => {
         allActivities = [...allActivities, ...userSpecificActivities];
         console.log('📊 User activities found:', userSpecificActivities.length);
       }
-
+      
       // Process thumbnail activities
       if (thumbnailResponse.ok) {
         const thumbnailData = await thumbnailResponse.json();
-        console.log('🔍 Raw thumbnail activities for debugging:', thumbnailData.activities?.length || 0);
-        console.log('🔍 Looking for userId:', userId, 'username:', username);
-        
         const thumbnailSpecificActivities = (thumbnailData.activities || []).filter(activity => {
           const matchesUserId = activity.userId === userId || activity.userId === String(userId);
           const matchesUsername = activity.username === username || activity.username === String(username);
-          const matches = matchesUserId || matchesUsername;
-          
-          if (matches) {
-            console.log('✅ Found matching thumbnail activity:', {
-              action: activity.action,
-              userId: activity.userId,
-              username: activity.username,
-              doctorName: activity.doctorName
-            });
-          }
-          
-          return matches;
+          return matchesUserId || matchesUsername;
         });
-        
         allActivities = [...allActivities, ...thumbnailSpecificActivities];
         console.log('📊 Thumbnail activities found:', thumbnailSpecificActivities.length);
       }
 
-      // Process schedule activities
-      if (scheduleResponse.ok) {
-        const scheduleData = await scheduleResponse.json();
-        console.log('🔍 Raw schedule activities for debugging:', scheduleData.activities?.length || 0);
-        
-        const scheduleSpecificActivities = (scheduleData.activities || []).filter(activity => {
-          const matchesUserId = activity.userId === userId || activity.userId === String(userId);
-          const matchesUsername = activity.username === username || activity.username === String(username);
-          const matches = matchesUserId || matchesUsername;
-          
-          if (matches) {
-            console.log('✅ Found matching schedule activity:', {
-            action: activity.action,
-              userId: activity.userId,
-              username: activity.username,
-              doctorName: activity.doctorName,
-              stepName: activity.stepName
-            });
-          }
-          
-          return matches;
-        });
-        
-        allActivities = [...allActivities, ...scheduleSpecificActivities];
-        console.log('📊 Schedule activities found:', scheduleSpecificActivities.length);
+      // Build doctor map for enrichment
+      let doctorIdToName = {};
+      try {
+        if (doctorsResponse && doctorsResponse.ok) {
+          const doctorsData = await doctorsResponse.json();
+          const list = doctorsData.doctors || [];
+          list.forEach(d => {
+            const id = d._id || d.id;
+            if (id) doctorIdToName[id] = d.name || d.fullName || d.displayName || d.title || '';
+          });
+        }
+      } catch (e) {
+        console.warn('Doctor enrichment skipped due to error:', e);
       }
 
-      // Sort activities by timestamp (newest first)
-      allActivities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      // Enrich thumbnail activities with missing doctorName
+      allActivities = allActivities.map(activity => {
+        const action = String(activity.action || '').toLowerCase();
+        if (action.startsWith('thumbnail_')) {
+          const currentName = activity.doctorName && String(activity.doctorName).trim();
+          const doctorFromObj = activity.doctor && (activity.doctor.name || activity.doctor.doctorName || activity.doctor.fullName || activity.doctor.displayName || activity.doctor.title);
+          const did = activity.doctorId || (activity.doctor && activity.doctor.id) || (activity.details && activity.details.doctorId);
+          if (!currentName || currentName === 'Unknown Doctor') {
+            if (doctorFromObj) {
+              activity.doctorName = doctorFromObj;
+            } else if (did && doctorIdToName[did]) {
+              activity.doctorName = doctorIdToName[did];
+            }
+          }
+        }
+        return activity;
+      });
       
-      console.log('✅ Total filtered activities for user:', allActivities.length);
+      // Enhanced deduplication across sources and noisy events
+      const uniqueActivities = [];
+      const seenStrict = new Set();
+      const seenPerMinute = new Set(); // for dashboard_access collapsing
+      const seenThumbDeletePerMinute = new Set(); // collapse repeated thumbnail deletes per doctor per minute
+
+      const roundToGranularity = (date, granularity) => {
+        const d = new Date(date);
+        if (granularity === 'minute') {
+          d.setSeconds(0, 0);
+        } else if (granularity === 'second') {
+          d.setMilliseconds(0);
+        }
+        return d.getTime();
+      };
+
+      const getActor = (a) => a.userId || a.username || a.user?.id || a.user?.username || 'unknown';
+      const getDoctorRef = (a) => a.doctorId || a.doctor?.id || a.details?.doctorId || a.doctorName || a.details?.doctorName || '';
+      const getResourceRef = (a) => a.thumbnailId || a.details?.thumbnailId || a.workflowId || a.details?.workflowId || '';
+
+      const buildKey = (a, granularity = 'second') => {
+        const t = roundToGranularity(a.timestamp, granularity);
+        const actor = getActor(a);
+        const doctorRef = getDoctorRef(a);
+        const resourceRef = getResourceRef(a);
+        return `${a.action}|${actor}|${doctorRef}|${resourceRef}|${t}`;
+      };
+
+      for (const activity of allActivities) {
+        const action = String(activity.action || '').toLowerCase();
+
+        // Skip thumbnail activities with no identifiable doctor (would render as "Unknown Doctor")
+        if (action.startsWith('thumbnail_')) {
+          const hasDoctorName = Boolean(
+            activity.doctorName ||
+            (activity.doctor && (activity.doctor.name || activity.doctor.doctorName || activity.doctor.fullName || activity.doctor.displayName)) ||
+            (activity.details && (activity.details.doctorName || (activity.details.doctor && activity.details.doctor.name)))
+          );
+          const hasDoctorRef = Boolean(getDoctorRef(activity));
+          if (!hasDoctorName && !hasDoctorRef) {
+            continue;
+          }
+        }
+
+        // Collapse dashboard_access to one per minute per actor
+        if (action === 'dashboard_access') {
+          const minuteKey = buildKey(activity, 'minute');
+          if (seenPerMinute.has(minuteKey)) continue;
+          seenPerMinute.add(minuteKey);
+          uniqueActivities.push(activity);
+          continue;
+        }
+
+        // Collapse repeated thumbnail delete events per doctor per minute
+        if (action.startsWith('thumbnail_') && action.includes('delete')) {
+          const actor = getActor(activity);
+          const doctorRef = getDoctorRef(activity);
+          const tMinute = roundToGranularity(activity.timestamp, 'minute');
+          const minuteKey = `thumbnail_delete|${actor}|${doctorRef}|${tMinute}`;
+          if (seenThumbDeletePerMinute.has(minuteKey)) continue;
+          seenThumbDeletePerMinute.add(minuteKey);
+          uniqueActivities.push(activity);
+          continue;
+        }
+
+        // Collapse duplicate delete events that can come from multiple sources (non-thumbnail)
+        if (action.includes('delete')) {
+          const deleteKey = buildKey(activity, 'second');
+          if (seenStrict.has(deleteKey)) continue;
+          seenStrict.add(deleteKey);
+          uniqueActivities.push(activity);
+          continue;
+        }
+
+        // Default dedup (strict)
+        const strictKey = buildKey(activity, 'second');
+        if (seenStrict.has(strictKey)) continue;
+        seenStrict.add(strictKey);
+        uniqueActivities.push(activity);
+      }
       
-      // If no activities found, create a placeholder
-      if (allActivities.length === 0) {
+      // Sort by timestamp (newest first)
+      uniqueActivities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      
+      console.log('📊 Total activities found:', allActivities.length);
+      console.log('📊 Unique activities:', uniqueActivities.length);
+      
+      // Debug: Check for dashboard_access duplicates
+      const dashboardActivities = allActivities.filter(a => a.action === 'dashboard_access');
+      console.log('🔍 Dashboard access activities:', dashboardActivities.map(a => ({
+        action: a.action,
+        timestamp: a.timestamp,
+        userId: a.userId,
+        username: a.username,
+        source: a.source || 'unknown'
+      })));
+      
+      if (uniqueActivities.length === 0) {
         const placeholderActivity = {
           action: 'No activity performed',
           timestamp: new Date(),
@@ -291,13 +425,12 @@ const UsersPage = () => {
         };
         setSelectedUserActivities([placeholderActivity]);
       } else {
-        setSelectedUserActivities(allActivities);
+        setSelectedUserActivities(uniqueActivities);
       }
       
       setShowActivityModal(true);
     } catch (error) {
       console.error('Error fetching user activities:', error);
-      // Show error message
       const errorActivity = {
         action: 'error',
         timestamp: new Date(),
@@ -328,7 +461,7 @@ const UsersPage = () => {
     setEditFormData({
       name: user.name,
       email: user.email,
-      department: user.department,
+      // department: user.department,
       username: user.username,
       status: user.status
     });
@@ -582,102 +715,221 @@ const UsersPage = () => {
        const downloadChartAsImage = () => {
     if (!activityChartData) return;
 
-    // Create canvas for chart
+    // Create canvas for chart with better dimensions
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 1200;
-    canvas.height = 800;
+    canvas.width = 1400;
+    canvas.height = 1000;
 
-    // Set background
-    ctx.fillStyle = '#ffffff';
+    // Helper function to draw rounded rectangle
+    const drawRoundedRect = (x, y, width, height, radius, fillColor, strokeColor = null) => {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      
+      if (fillColor) {
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+      }
+      
+      if (strokeColor) {
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    };
+
+    // Helper function to draw shadow
+    const drawShadow = (x, y, width, height, radius) => {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 4;
+      drawRoundedRect(x, y, width, height, radius, '#ffffff');
+      ctx.restore();
+    };
+
+    // Set background gradient
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    gradient.addColorStop(0, '#f8fafc');
+    gradient.addColorStop(1, '#e2e8f0');
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw title
-    ctx.fillStyle = '#1f2937';
-    ctx.font = 'bold 28px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(`Activity Report`, canvas.width / 2, 40);
-    ctx.fillText(`${activityChartData.user?.name || 'Unknown User'} (@${activityChartData.user?.username || 'unknown'})`, canvas.width / 2, 75);
+    // Header section with shadow
+    drawShadow(50, 30, canvas.width - 100, 120, 20);
+    drawRoundedRect(50, 30, canvas.width - 100, 120, 20, '#ffffff', '#e2e8f0');
 
-    // Draw subtitle
-    ctx.font = '16px Arial';
+    // Header content
+    ctx.fillStyle = '#1e40af';
+    ctx.font = 'bold 36px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Employee Activity Report', canvas.width / 2, 70);
+
+    ctx.fillStyle = '#374151';
+    ctx.font = 'bold 24px Arial';
+    ctx.fillText(`${activityChartData.user?.name || 'Unknown User'}`, canvas.width / 2, 100);
+
     ctx.fillStyle = '#6b7280';
-    ctx.fillText(`Generated on ${new Date(activityChartData.timestamp).toLocaleString()}`, canvas.width / 2, 100);
+    ctx.font = '18px Arial';
+    ctx.fillText(`@${activityChartData.user?.username || 'unknown'} • Generated ${new Date(activityChartData.timestamp).toLocaleDateString()}`, canvas.width / 2, 125);
 
-    // Summary section
-    ctx.font = 'bold 18px Arial';
-    ctx.fillStyle = '#1f2937';
-    ctx.textAlign = 'left';
-    ctx.fillText(`Total User Activities: ${activityChartData.totalActivities}`, 50, 140);
-    ctx.fillText(`Login Activities: ${activityChartData.userChart.data.find(item => item.category === 'Login')?.count || 0}`, 50, 165);
-    ctx.fillText(`Navigation Activities: ${activityChartData.userChart.data.find(item => item.category === 'Page Navigation')?.count || 0}`, 50, 190);
-    ctx.fillText(`Thumbnail Activities: ${activityChartData.userChart.data.find(item => item.category === 'Thumbnail Activities')?.count || 0}`, 50, 215);
-    ctx.fillText(`Schedule Activities: ${activityChartData.userChart.data.find(item => item.category === 'Schedule Activities')?.count || 0}`, 50, 240);
+    // Employee info cards
+    const cardY = 180;
+    const cardWidth = (canvas.width - 150) / 3;
+    const cardHeight = 100;
 
-    // Draw single centered pie chart
-    const chartY = 280;
-    const radius = 120;
-    const centerX = canvas.width / 2;
-
-    // User Activities Chart
-    ctx.fillStyle = '#1f2937';
-    ctx.font = 'bold 20px Arial';
+    // Card 1: Total Activities
+    drawShadow(50, cardY, cardWidth, cardHeight, 15);
+    drawRoundedRect(50, cardY, cardWidth, cardHeight, 15, '#ffffff', '#e2e8f0');
+    
+    ctx.fillStyle = '#3b82f6';
+    ctx.font = 'bold 32px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('User Activities Distribution', centerX, chartY - 40);
+    ctx.fillText(activityChartData.totalActivities.toString(), 50 + cardWidth/2, cardY + 45);
+    
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '16px Arial';
+    ctx.fillText('Total Activities', 50 + cardWidth/2, cardY + 70);
 
-    let currentAngle = 0;
-    const userColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+    // Card 2: Login Activities
+    const loginCount = activityChartData.userChart.data.find(item => item.category === 'Login')?.count || 0;
+    drawShadow(50 + cardWidth + 25, cardY, cardWidth, cardHeight, 15);
+    drawRoundedRect(50 + cardWidth + 25, cardY, cardWidth, cardHeight, 15, '#ffffff', '#e2e8f0');
+    
+    ctx.fillStyle = '#10b981';
+    ctx.font = 'bold 32px Arial';
+    ctx.fillText(loginCount.toString(), 50 + cardWidth + 25 + cardWidth/2, cardY + 45);
+    
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '16px Arial';
+    ctx.fillText('Login Sessions', 50 + cardWidth + 25 + cardWidth/2, cardY + 70);
+
+    // Card 3: Navigation Activities
+    const navCount = activityChartData.userChart.data.find(item => item.category === 'Page Navigation')?.count || 0;
+    drawShadow(50 + (cardWidth + 25) * 2, cardY, cardWidth, cardHeight, 15);
+    drawRoundedRect(50 + (cardWidth + 25) * 2, cardY, cardWidth, cardHeight, 15, '#ffffff', '#e2e8f0');
+    
+    ctx.fillStyle = '#f59e0b';
+    ctx.font = 'bold 32px Arial';
+    ctx.fillText(navCount.toString(), 50 + (cardWidth + 25) * 2 + cardWidth/2, cardY + 45);
+    
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '16px Arial';
+    ctx.fillText('Page Views', 50 + (cardWidth + 25) * 2 + cardWidth/2, cardY + 70);
+
+    // Chart section
+    const chartY = cardY + cardHeight + 60;
+    const chartWidth = canvas.width - 100;
+    const chartHeight = 400;
+
+    drawShadow(50, chartY, chartWidth, chartHeight, 20);
+    drawRoundedRect(50, chartY, chartWidth, chartHeight, 20, '#ffffff', '#e2e8f0');
+
+    // Chart title
+    ctx.fillStyle = '#1f2937';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Activity Distribution', canvas.width / 2, chartY + 40);
+
+    // Draw modern donut chart
+    const centerX = canvas.width / 2;
+    const centerY = chartY + chartHeight / 2 + 20;
+    const outerRadius = 140;
+    const innerRadius = 80;
+
+    let currentAngle = -Math.PI / 2;
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#84cc16'];
     
     activityChartData.userChart.data.forEach((item, index) => {
       const sliceAngle = (item.count / activityChartData.userChart.total) * 2 * Math.PI;
       
+      // Outer arc
       ctx.beginPath();
-      ctx.moveTo(centerX, chartY);
-      ctx.arc(centerX, chartY, radius, currentAngle, currentAngle + sliceAngle);
+      ctx.arc(centerX, centerY, outerRadius, currentAngle, currentAngle + sliceAngle);
+      ctx.arc(centerX, centerY, innerRadius, currentAngle + sliceAngle, currentAngle, true);
       ctx.closePath();
-      ctx.fillStyle = userColors[index % userColors.length];
+      ctx.fillStyle = colors[index % colors.length];
       ctx.fill();
       
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
+      // Add subtle highlight
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.lineWidth = 2;
       ctx.stroke();
       
       currentAngle += sliceAngle;
     });
 
-    // Draw legend below chart
-    const legendY = chartY + radius + 80;
-    const legendStartX = centerX - 200;
-
-    // User Activities Legend
-    ctx.font = 'bold 16px Arial';
+    // Center text
     ctx.fillStyle = '#1f2937';
+    ctx.font = 'bold 28px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('User Activities Legend', centerX, legendY);
+    ctx.fillText(activityChartData.userChart.total.toString(), centerX, centerY - 10);
     
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '16px Arial';
+    ctx.fillText('Total', centerX, centerY + 15);
+
+    // Legend section
+    const legendY = chartY + chartHeight - 80;
+    const legendStartX = 100;
+    const legendItemHeight = 25;
+
+    ctx.fillStyle = '#374151';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Activity Breakdown', legendStartX, legendY);
+
     let legendItemY = legendY + 30;
     activityChartData.userChart.data.forEach((item, index) => {
-      const color = userColors[index % userColors.length];
+      const color = colors[index % colors.length];
       
+      // Legend item background
+      drawRoundedRect(legendStartX, legendItemY - 15, 300, legendItemHeight, 8, '#f8fafc', '#e2e8f0');
+      
+      // Color indicator
       ctx.fillStyle = color;
-      ctx.fillRect(legendStartX + (index % 2) * 250, legendItemY - 8, 12, 12);
+      ctx.beginPath();
+      ctx.arc(legendStartX + 15, legendItemY, 8, 0, 2 * Math.PI);
+      ctx.fill();
       
-      ctx.fillStyle = '#1f2937';
-      ctx.font = '12px Arial';
+      // Text
+      ctx.fillStyle = '#374151';
+      ctx.font = '16px Arial';
+      ctx.fillText(item.category, legendStartX + 35, legendItemY + 5);
+      
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '14px Arial';
+      ctx.textAlign = 'right';
+      ctx.fillText(`${item.count} (${item.percentage}%)`, legendStartX + 280, legendItemY + 5);
+      
       ctx.textAlign = 'left';
-      ctx.fillText(`${item.category}: ${item.count} (${item.percentage}%)`, legendStartX + (index % 2) * 250 + 20, legendItemY);
-      
-      if (index % 2 === 1) {
-        legendItemY += 20;
-      }
+      legendItemY += legendItemHeight + 10;
     });
+
+    // Footer
+    const footerY = canvas.height - 60;
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Generated by HCV Portal System', canvas.width / 2, footerY);
+    ctx.fillText(new Date().toLocaleString(), canvas.width / 2, footerY + 20);
 
     // Convert to image and download
     canvas.toBlob((blob) => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `comprehensive-activity-chart-${activityChartData.user?.username || 'unknown'}-${new Date().toISOString().split('T')[0]}.png`;
+      a.download = `employee-activity-report-${activityChartData.user?.username || 'unknown'}-${new Date().toISOString().split('T')[0]}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -718,7 +970,39 @@ const UsersPage = () => {
         // Helper function to format thumbnail activity display text
         const getThumbnailActivityDisplayText = (activity) => {
           const action = activity.action.replace('thumbnail_', '');
-          const doctorName = activity.doctorName || 'Unknown Doctor';
+          
+          // Try to get doctor name from various possible fields with more comprehensive search
+          let doctorName = activity.doctorName || 
+                          activity.doctor?.name || 
+                          activity.doctor?.doctorName ||
+                          activity.details?.doctorName ||
+                          activity.details?.doctor?.name ||
+                          activity.metadata?.doctorName ||
+                          activity.data?.doctorName ||
+                          activity.doctorName ||
+                          activity.doctor?.fullName ||
+                          activity.doctor?.displayName ||
+                          activity.doctor?.title ||
+                          activity.doctor?.firstName + ' ' + activity.doctor?.lastName ||
+                          activity.doctor?.first_name + ' ' + activity.doctor?.last_name;
+          
+          // Clean up the doctor name if it exists
+          if (doctorName && doctorName.trim() && doctorName !== 'null' && doctorName !== 'undefined') {
+            doctorName = doctorName.trim();
+          } else {
+            doctorName = null;
+          }
+          
+          // If still no doctor name, try to extract from other fields
+          if (!doctorName) {
+            // Check if there's a doctor ID that we can use
+            const doctorId = activity.doctorId || activity.doctor?.id || activity.details?.doctorId;
+            if (doctorId && doctorId !== 'null' && doctorId !== 'undefined') {
+              doctorName = `Doctor ID: ${doctorId}`;
+            } else {
+              doctorName = 'Unknown Doctor';
+            }
+          }
           
           switch (action) {
             case 'create':
@@ -745,7 +1029,27 @@ const UsersPage = () => {
         // Helper function to format schedule activity display text
         const getScheduleActivityDisplayText = (activity) => {
           const action = activity.action;
-          const doctorName = activity.doctorName || 'Unknown Doctor';
+          
+          // Try to get doctor name from various possible fields
+          let doctorName = activity.doctorName || 
+                          activity.doctor?.name || 
+                          activity.doctor?.doctorName ||
+                          activity.details?.doctorName ||
+                          activity.details?.doctor?.name ||
+                          activity.metadata?.doctorName ||
+                          activity.data?.doctorName;
+          
+          // If still no doctor name, try to extract from other fields
+          if (!doctorName) {
+            // Check if there's a doctor ID that we can use
+            const doctorId = activity.doctorId || activity.doctor?.id || activity.details?.doctorId;
+            if (doctorId) {
+              doctorName = `Doctor ID: ${doctorId}`;
+            } else {
+              doctorName = 'Unknown Doctor';
+            }
+          }
+          
           const stepName = activity.stepName || '';
           const stepNumber = activity.stepNumber || '';
           
@@ -767,20 +1071,24 @@ const UsersPage = () => {
 
         // Helper function to draw a clean header
         const drawHeader = () => {
-          // Header background
-          doc.setFillColor(59, 130, 246); // Blue background
-          doc.rect(0, 0, pageWidth, 25, 'F');
+          // Header background with gradient effect
+          doc.setFillColor(30, 64, 175); // Deep blue background
+          doc.rect(0, 0, pageWidth, 35, 'F');
           
           // Company/System name
           doc.setTextColor(255, 255, 255);
-          doc.setFontSize(18);
-        doc.setFont('helvetica', 'bold');
-          doc.text('HCV PORTAL', margin, 12);
+          doc.setFontSize(20);
+          doc.setFont('helvetica', 'bold');
+          doc.text('HCV PORTAL', margin, 15);
 
           // Report title
-          doc.setFontSize(14);
-        doc.setFont('helvetica', 'normal');
-          doc.text('Employee Activity Report', pageWidth - margin, 12, { align: 'right' });
+          doc.setFontSize(16);
+          doc.setFont('helvetica', 'normal');
+          doc.text('Employee Activity Report', pageWidth - margin, 15, { align: 'right' });
+          
+          // Subtitle
+          doc.setFontSize(12);
+          doc.text('Professional Activity Analysis', pageWidth - margin, 25, { align: 'right' });
           
           // Reset text color
           doc.setTextColor(0, 0, 0);
@@ -788,15 +1096,19 @@ const UsersPage = () => {
 
         // Helper function to draw a clean section header
         const drawSectionHeader = (title, y) => {
-          // Section background
+          // Section background with subtle border
           doc.setFillColor(248, 250, 252); // Light gray background
-          doc.rect(margin, y - 5, contentWidth, 12, 'F');
+          doc.rect(margin, y - 8, contentWidth, 16, 'F');
+          
+          // Left accent line
+          doc.setFillColor(59, 130, 246); // Blue accent
+          doc.rect(margin, y - 8, 4, 16, 'F');
           
           // Section title
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
+          doc.setFontSize(14);
+          doc.setFont('helvetica', 'bold');
           doc.setTextColor(31, 41, 55); // Dark gray text
-          doc.text(title, margin + 3, y + 2);
+          doc.text(title, margin + 8, y + 2);
           
           // Reset text color
           doc.setTextColor(0, 0, 0);
@@ -804,64 +1116,68 @@ const UsersPage = () => {
 
         // Helper function to draw a clean card
         const drawCard = (title, data, y, color) => {
-          const cardHeight = 35;
-          const cardWidth = contentWidth / 3 - 5;
+          const cardHeight = 40;
+          const cardWidth = contentWidth / 3 - 8;
           
-          // Card background
+          // Card background with shadow effect
           doc.setFillColor(255, 255, 255);
-          doc.setDrawColor(229, 231, 235); // Light gray border
-          doc.rect(margin, y, cardWidth, cardHeight, 'FD');
+          doc.setDrawColor(226, 232, 240); // Light border
+          doc.rect(margin + 1, y + 1, cardWidth, cardHeight, 'FD'); // Shadow
+          doc.setFillColor(255, 255, 255);
+          doc.setDrawColor(226, 232, 240);
+          doc.rect(margin, y, cardWidth, cardHeight, 'FD'); // Main card
           
           // Card title
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
+          doc.setFontSize(11);
+          doc.setFont('helvetica', 'bold');
           doc.setTextColor(75, 85, 99); // Gray text
-          doc.text(title, margin + 5, y + 8);
+          doc.text(title, margin + 8, y + 10);
           
           // Card data
-          doc.setFontSize(16);
+          doc.setFontSize(18);
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(color.r, color.g, color.b);
-          doc.text(data.toString(), margin + 5, y + 20);
+          doc.text(data.toString(), margin + 8, y + 25);
           
           // Card subtitle
-          doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
           doc.setTextColor(107, 114, 128); // Light gray
-          doc.text('Total Activities', margin + 5, y + 28);
+          doc.text('Total Activities', margin + 8, y + 35);
           
-          return cardWidth + 5;
+          return cardWidth + 8;
         };
 
         // Helper function to draw a clean table
         const drawTable = (headers, data, y, colors) => {
           const tableWidth = contentWidth;
           const colWidth = tableWidth / headers.length;
-          const rowHeight = 8;
+          const rowHeight = 10;
           
-          // Table header background
-          doc.setFillColor(249, 250, 251);
+          // Table header background with accent
+          doc.setFillColor(59, 130, 246); // Blue header
           doc.rect(margin, y, tableWidth, rowHeight, 'F');
           
           // Table header text
-          doc.setFontSize(9);
+          doc.setFontSize(10);
           doc.setFont('helvetica', 'bold');
-          doc.setTextColor(55, 65, 81);
+          doc.setTextColor(255, 255, 255); // White text on blue
           
           headers.forEach((header, index) => {
-            doc.text(header, margin + (index * colWidth) + 3, y + 5);
+            doc.text(header, margin + (index * colWidth) + 4, y + 6);
           });
           
           // Table data
           doc.setFont('helvetica', 'normal');
-          doc.setFontSize(8);
+          doc.setFontSize(9);
+          doc.setTextColor(0, 0, 0);
           
           data.forEach((row, rowIndex) => {
             const currentY = y + rowHeight + (rowIndex * rowHeight);
             
             // Alternate row background
             if (rowIndex % 2 === 0) {
-              doc.setFillColor(249, 250, 251);
+              doc.setFillColor(248, 250, 252);
               doc.rect(margin, currentY, tableWidth, rowHeight, 'F');
             }
             
@@ -870,69 +1186,74 @@ const UsersPage = () => {
               const color = hexToRgb(colors[rowIndex]);
               if (color) {
                 doc.setFillColor(color.r, color.g, color.b);
-                doc.rect(margin + 1, currentY + 1, 3, 3, 'F');
+                doc.rect(margin + 2, currentY + 2, 4, 4, 'F');
               }
             }
             
             // Table data
             row.forEach((cell, colIndex) => {
-              doc.text(cell.toString(), margin + (colIndex * colWidth) + 3, currentY + 5);
+              doc.text(cell.toString(), margin + (colIndex * colWidth) + 4, currentY + 6);
             });
           });
           
-          return y + rowHeight + (data.length * rowHeight) + 10;
+          // Table border
+          doc.setDrawColor(226, 232, 240);
+          doc.rect(margin, y, tableWidth, rowHeight + (data.length * rowHeight), 'S');
+          
+          return y + rowHeight + (data.length * rowHeight) + 15;
         };
 
         // Start building the PDF
         drawHeader();
         
-        let currentY = 35;
+        let currentY = 45;
 
         // Employee Information Section
         drawSectionHeader('Employee Information', currentY);
-        currentY += 15;
-        
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Name:', margin, currentY);
-        doc.setFont('helvetica', 'normal');
-        doc.text(activityChartData.user?.name || 'Unknown User', margin + 20, currentY);
-
-          currentY += 6;
-        doc.setFont('helvetica', 'bold');
-        doc.text('Username:', margin, currentY);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`@${activityChartData.user?.username || 'unknown'}`, margin + 20, currentY);
-        
-        currentY += 6;
-        doc.setFont('helvetica', 'bold');
-        doc.text('Email:', margin, currentY);
-        doc.setFont('helvetica', 'normal');
-        doc.text(activityChartData.user?.email || 'N/A', margin + 20, currentY);
-
-          currentY += 6;
-        doc.setFont('helvetica', 'bold');
-        doc.text('Department:', margin, currentY);
-        doc.setFont('helvetica', 'normal');
-        doc.text(activityChartData.user?.department || 'General', margin + 20, currentY);
-
-          currentY += 6;
-        doc.setFont('helvetica', 'bold');
-        doc.text('Report Generated:', margin, currentY);
-        doc.setFont('helvetica', 'normal');
-        doc.text(new Date(activityChartData.timestamp).toLocaleString(), margin + 20, currentY);
-        
         currentY += 20;
+        
+        // Employee info in a more organized layout
+        const infoData = [
+          ['Name', activityChartData.user?.name || 'Unknown User'],
+          // ['Username', `@${activityChartData.user?.username || 'unknown'}`],
+          ['Email', activityChartData.user?.email || 'N/A'],
+          // ['Department', activityChartData.user?.department || 'General'],
+          ['Report Generated', new Date(activityChartData.timestamp).toLocaleString()]
+        ];
+        
+        infoData.forEach(([label, value]) => {
+          doc.setFontSize(11);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(55, 65, 81);
+          doc.text(`${label}:`, margin, currentY);
+          
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(0, 0, 0);
+          doc.text(value, margin + 35, currentY);
+          
+          currentY += 7;
+        });
+        
+        currentY += 15;
 
         // Activity Summary Cards
         drawSectionHeader('Activity Summary', currentY);
-        currentY += 15;
+        currentY += 20;
 
-        const userColor = hexToRgb('#3b82f6');
+        // Create multiple summary cards
+        const summaryCards = [
+          { title: 'Total Activities', value: activityChartData.userChart.total, color: '#3b82f6' },
+          { title: 'Login Sessions', value: activityChartData.userChart.data.find(item => item.category === 'Login')?.count || 0, color: '#10b981' },
+          { title: 'Page Views', value: activityChartData.userChart.data.find(item => item.category === 'Page Navigation')?.count || 0, color: '#f59e0b' }
+        ];
         
-        drawCard('General Activities', activityChartData.userChart.total, currentY, userColor);
+        summaryCards.forEach((card, index) => {
+          const cardColor = hexToRgb(card.color);
+          const cardX = margin + (index * (contentWidth / 3 + 8));
+          drawCard(card.title, card.value, currentY, cardColor);
+        });
         
-        currentY += 45;
+        currentY += 50;
 
         // General Activities Breakdown
         if (activityChartData.userChart.data.length > 0) {
@@ -1114,12 +1435,21 @@ const UsersPage = () => {
         currentY = drawTable(statsHeaders, statsData, currentY, statsColors);
 
         // Footer
-        const footerY = pageHeight - 15;
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'italic');
+        const footerY = pageHeight - 20;
+        
+        // Footer line
+        doc.setDrawColor(226, 232, 240);
+        doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
+        
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
         doc.setTextColor(107, 114, 128);
         doc.text('Generated by HCV Portal System', margin, footerY);
         doc.text(`Page ${doc.internal.getNumberOfPages()}`, pageWidth - margin, footerY, { align: 'right' });
+        
+        // Add generation timestamp
+        doc.setFontSize(8);
+        doc.text(`Generated on ${new Date().toLocaleString()}`, margin, footerY + 8);
 
                  // Download PDF
         doc.save(`employee-activity-report-${activityChartData.user?.username || 'unknown'}-${new Date().toISOString().split('T')[0]}.pdf`);
@@ -1338,7 +1668,7 @@ const UsersPage = () => {
 
       {/* User Activity Modal */}
       {showActivityModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 bg-opacity-30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">
@@ -1381,14 +1711,14 @@ const UsersPage = () => {
                 </div>
               ) : (
                   selectedUserActivities.map((activity, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg p-4">
+                    <div key={`${activity.action}_${activity.timestamp}_${index}`} className="border border-gray-200 rounded-lg p-4">
                       {activity.action === 'No activity performed' ? (
                     <div className="text-center py-8">
                           <span className="text-xl font-bold text-gray-600">{activity.action}</span>
                     </div>
                   ) : (
                         <div className="flex justify-between items-start">
-                          <div>
+                          <div className="flex-1">
                             <span className="font-semibold text-blue-600">
                               {activity.action.startsWith('thumbnail_') ? 
                                 getThumbnailActivityDisplayText(activity) : 
@@ -1402,11 +1732,8 @@ const UsersPage = () => {
                             <p className="text-sm text-gray-600 mt-1">
                               {new Date(activity.timestamp).toLocaleString()}
                             </p>
-                            {activity.action.startsWith('thumbnail_') && activity.doctorName && (
-                              <div className="mt-2 text-sm text-gray-700">
-                                <strong>Doctor:</strong> {activity.doctorName}
-                              </div>
-                            )}
+                            
+                            {/* Only show additional details if they provide extra information not already in the main text */}
                             {activity.action === 'page_navigation' && (activity.details?.fromPage || activity.details?.toPage) && (
                               <div className="mt-2 text-sm text-gray-700">
                                 <strong>From:</strong> {activity.details?.fromPage || activity.details?.from || 'Unknown Page'}
@@ -1415,21 +1742,16 @@ const UsersPage = () => {
                                     </div>
                                     </div>
                                   )}
-                            {(activity.action.startsWith('schedule_') || activity.action.startsWith('workflow_')) && activity.doctorName && (
+                            
+                            {/* Only show step details for schedule activities if step info exists */}
+                            {(activity.action.startsWith('schedule_') || activity.action.startsWith('workflow_')) && 
+                             activity.stepName && activity.stepNumber && (
                               <div className="mt-2 text-sm text-gray-700">
-                                <strong>Doctor:</strong> {activity.doctorName}
-                                {activity.stepName && activity.stepNumber && (
-                                  <div className="mt-1">
-                                    <strong>Step:</strong> {activity.stepNumber}: {activity.stepName}
-                                    </div>
-                                  )}
-                                    </div>
-                                  )}
-                                </div>
-                            <span className="text-xs text-gray-400">
-                            {new Date(activity.timestamp).toLocaleDateString()}
-                            </span>
+                                <strong>Step:</strong> {activity.stepNumber}: {activity.stepName}
                               </div>
+                            )}
+                          </div>
+                        </div>
                       )}
                       </div>
                     ))
@@ -1444,7 +1766,7 @@ const UsersPage = () => {
 
         {/* View User Modal */}
         {showViewModal && selectedUser && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold">User Details</h2>
@@ -1504,7 +1826,7 @@ const UsersPage = () => {
 
         {/* Edit User Modal */}
         {showEditModal && selectedUser && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold">Edit User</h2>
@@ -1582,7 +1904,7 @@ const UsersPage = () => {
 
         {/* Delete User Modal */}
         {showDeleteModal && selectedUser && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-red-600">Delete User</h2>
@@ -1626,7 +1948,7 @@ const UsersPage = () => {
 
                  {/* Download Activity Chart Modal */}
          {showDownloadModal && activityChartData && activityChartData.user && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-900">
@@ -1785,7 +2107,7 @@ const UsersPage = () => {
 
         {/* Date Range Modal */}
         {showDateRangeModal && selectedUserForDateRange && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold text-gray-900">

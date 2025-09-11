@@ -59,7 +59,6 @@ const DoctorsIcon = () => (
   </svg>
 );
 
-
 const ScheduleIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -75,8 +74,6 @@ const TrendsIcon = () => (
     />
   </svg>
 );
-
-
 
 const ReportIcon = () => (
   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -104,13 +101,6 @@ const ChevronDownIcon = () => (
     <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
   </svg>
 );
-
-// const SearchIcon = () => (
-//   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-//     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-//   </svg>
-// );
-
 const SunIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -306,14 +296,6 @@ const Navbar = ({ children }) => {
 
             {/* Right Section */}
             <div className="flex items-center space-x-4">
-              {/* Icons */}
-              {/* <button className={`p-2 rounded-full icon-button ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'}`}>
-                <SearchIcon />
-              </button> */}
-              <button onClick={toggleTheme} aria-label="Toggle theme" className={`p-2 rounded-full icon-button ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'}`}>
-                {isDark ? <MoonIcon /> : <SunIcon />}
-              </button>
-
               {/* User Info */}
               <div className="flex items-center space-x-3 ml-4">
                 <span className={`${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
