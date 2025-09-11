@@ -59,7 +59,7 @@ const HomePage = async() => {
           </div>
           
           <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-            <h3 className="font-semibold text-gray-800 mb-2">What's happening?</h3>
+            <h3 className="font-semibold text-gray-800 mb-2">What&apos;s happening?</h3>
             <ul className="text-sm text-gray-600 space-y-1">
               <li>• Database connection is being established</li>
               <li>• Collections and indexes are being created</li>
