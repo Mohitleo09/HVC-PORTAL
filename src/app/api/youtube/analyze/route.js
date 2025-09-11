@@ -58,24 +58,24 @@ export async function POST(request) {
 
     // Use real YouTube Data API v3
     const apiKey = process.env.YOUTUBE_API_KEY;
-    // if (!apiKey) {
-    //   console.warn('YouTube API key not configured - returning mock data');
-    //   // Return mock data when API key is not available
-    //   return NextResponse.json({
-    //     success: true,
-    //     video: {
-    //       videoId: videoId,
-    //       title: 'Sample Video Title',
-    //       views: 1000,
-    //       thumbnail: `https://img.youtube.com/vi/${videoId}/default.jpg`,
-    //       duration: 'PT5M30S',
-    //       publishedAt: new Date().toISOString(),
-    //       channelTitle: 'Sample Channel',
-    //       description: 'Sample video description'
-    //     },
-    //     message: 'Mock data returned (YouTube API key not configured)'
-    //   });
-    // }
+    if (!apiKey) {
+      console.warn('YouTube API key not configured - returning mock data');
+      // Return mock data when API key is not available
+      return NextResponse.json({
+        success: true,
+        video: {
+          videoId: videoId,
+          title: 'Sample Video Title',
+          views: 1000,
+          thumbnail: `https://img.youtube.com/vi/${videoId}/default.jpg`,
+          duration: 'PT5M30S',
+          publishedAt: new Date().toISOString(),
+          channelTitle: 'Sample Channel',
+          description: 'Sample video description'
+        },
+        message: 'Mock data returned (YouTube API key not configured)'
+      });
+    }
     
     try {
       const response = await fetch(
